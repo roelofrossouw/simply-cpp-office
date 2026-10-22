@@ -1,6 +1,6 @@
 // Pictures out of a .docx built here: the text's order (DrawingML and the older VML), each once,
 // then the ones not placed; external links skipped; raster() by name; not-a-docx errors.
-#include <archive.h>
+#include <sc_archive.h>
 #include <office.h>
 #include <sc_test.h>
 
