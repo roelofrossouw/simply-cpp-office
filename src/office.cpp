@@ -1,6 +1,6 @@
 #include "office.h"
 
-#include <archive.h>
+#include <sc_archive.h>
 #include <core.h>
 #include <xml.h>
 
