@@ -10,7 +10,7 @@ message(STATUS "SimplyCPP ${SC_MODULE} Version: ${SC_VERSION}")
 
 find_or_install_package(sc-core simply-cpp-dev simply-cpp 1.20.0)
 # Office files are ZIP archives of XML: sc-archive opens them, sc-web reads the XML.
-find_or_install_package(sc-archive simply-cpp-archive-dev simply-cpp-archive 0.0.0)
+find_or_install_package(sc-archive simply-cpp-archive-dev simply-cpp-archive 1.0.0)
 find_or_install_package(sc-web simply-cpp-web-dev simply-cpp-web 1.4.7)
 
 set(SOURCE_OBJECTS include/office.h)
@@ -37,4 +37,4 @@ endif ()
 
 add_sc_example(sc-office-demo)
 
-package_sc_module(DEV_DEPENDS "simply-cpp-dev (>= 1.20.0~)" "simply-cpp-archive-dev (>= 0.0.0~)" "simply-cpp-web-dev (>= 1.4.7~)")
+package_sc_module(DEV_DEPENDS "simply-cpp-dev (>= 1.20.0~)" "simply-cpp-archive-dev (>= 1.0.0~)" "simply-cpp-web-dev (>= 1.4.7~)")
