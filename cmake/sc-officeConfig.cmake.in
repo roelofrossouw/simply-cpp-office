@@ -3,7 +3,7 @@
 include("${CMAKE_CURRENT_LIST_DIR}/SimplyCppFunctions.cmake")
 
 find_or_install_package(sc-core simply-cpp-dev simply-cpp 1.20.0)
-find_or_install_package(sc-compression simply-cpp-compression-dev simply-cpp-compression 0.0.0)
+find_or_install_package(sc-archive simply-cpp-archive-dev simply-cpp-archive 0.0.0)
 find_or_install_package(sc-web simply-cpp-web-dev simply-cpp-web 1.4.7)
 
 include("${CMAKE_CURRENT_LIST_DIR}/sc-officeTargets.cmake")

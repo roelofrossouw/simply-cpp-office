@@ -6,7 +6,7 @@
 #include <vector>
 
 // Office documents: Word (.docx) so far; Excel (.xlsx) to come. They're ZIP archives of XML
-// (Office Open XML), read with sc-compression and sc-web.
+// (Office Open XML), read with sc-archive and sc-web.
 //
 //     for (const auto &picture: sc::office::word::images("statement.docx"))
 //         if (picture.raster()) process(picture.name, picture.bytes);

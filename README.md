@@ -2,7 +2,7 @@
 
 `sc-office` reads Office documents. So far: the pictures in a Word document
 (`.docx`); Excel (`.xlsx`) is to come. Office files are ZIP archives of XML
-(Office Open XML), read with sc-compression and sc-web.
+(Office Open XML), read with sc-archive and sc-web.
 
 **Documentation:** the [simply-cpp wiki](https://github.com/roelofrossouw/simply-cpp/wiki) has an [Office guide](https://github.com/roelofrossouw/simply-cpp/wiki/Office) and the [sc-office reference](https://github.com/roelofrossouw/simply-cpp/wiki/Reference-sc-office).
 
@@ -46,4 +46,4 @@ std::cout << pictures.size() << " pictures\n";
 ## Building and testing
 
 Run `bash scripts/install.sh` to configure, build, test, package and install.
-The test builds its own `.docx` (with sc-compression) and needs nothing else.
+The test builds its own `.docx` (with sc-archive) and needs nothing else.

@@ -1,6 +1,6 @@
 // Pictures out of a .docx built here: the text's order (DrawingML and the older VML), each once,
 // then the ones not placed; external links skipped; raster() by name; not-a-docx errors.
-#include <compression.h>
+#include <archive.h>
 #include <office.h>
 #include <sc_test.h>
 
@@ -51,12 +51,12 @@ int main() {
     fs::create_directories(root);
     const auto docx = root / "test.docx";
     {
-        sc::compression::zip_writer out{docx};
+        auto out = sc::archive::create(docx);
         out.add("[Content_Types].xml", "<Types/>");
         out.add("word/document.xml", body);
         out.add("word/_rels/document.xml.rels", rels);
-        out.add("word/media/image1.jpeg", "JPEG bytes", sc::compression::zip_method::store);
-        out.add("word/media/image2.png", "PNG bytes", sc::compression::zip_method::store);
+        out.add("word/media/image1.jpeg", "JPEG bytes", sc::archive::method::store);
+        out.add("word/media/image2.png", "PNG bytes", sc::archive::method::store);
         out.add("word/media/image3.gif", "GIF bytes");
         out.add("word/media/image4.emf", "EMF bytes"); // a header's, not in the text
         out.close();
@@ -96,7 +96,7 @@ int main() {
         CHECK_THROWS_AS((void) sc::office::word::images(root / "plain.txt"), std::runtime_error);
         const auto other = root / "other.zip";
         {
-            sc::compression::zip_writer out{other};
+            auto out = sc::archive::create(other);
             out.add("readme.txt", "no word/document.xml here");
             out.close();
         }

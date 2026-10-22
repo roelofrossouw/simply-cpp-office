@@ -1,6 +1,6 @@
 #include "office.h"
 
-#include <compression.h>
+#include <archive.h>
 #include <core.h>
 #include <xml.h>
 
@@ -33,7 +33,7 @@ namespace sc::office {
         }
 
         // word/_rels/document.xml.rels: each picture's relationship id and its path in the archive.
-        std::map<std::string, std::string> picture_targets(const compression::zip_reader &docx) {
+        std::map<std::string, std::string> picture_targets(const archive::reader &docx) {
             std::map<std::string, std::string> targets;
             if (!docx.contains("word/_rels/document.xml.rels")) return targets;
             const auto rels = web::document::parse(docx.read("word/_rels/document.xml.rels"));
@@ -46,7 +46,7 @@ namespace sc::office {
             return targets;
         }
 
-        std::vector<picture> pictures_of(const compression::zip_reader &docx) {
+        std::vector<picture> pictures_of(const archive::reader &docx) {
             if (!docx.contains("word/document.xml")) throw std::runtime_error("Word: not a .docx (no word/document.xml)");
             const auto targets = picture_targets(docx);
             std::vector<std::string> ids;
@@ -72,10 +72,10 @@ namespace sc::office {
     }
 
     std::vector<picture> word::images(const std::filesystem::path &docx) {
-        return pictures_of(compression::zip_reader{docx});
+        return pictures_of(archive::open(docx));
     }
 
     std::vector<picture> word::images_in(std::string docx) {
-        return pictures_of(compression::zip_reader::from_memory(std::move(docx)));
+        return pictures_of(archive::from_memory(std::move(docx)));
     }
 }
