@@ -25,6 +25,9 @@ namespace sc::office::excel {
         // beyond XFD1048576. On a const sheet it's at().
         cell &operator[](address where);
         [[nodiscard]] const cell &operator[](const address where) const { return at(where); }
+        // Removes the cell, and its row when that was its last: 1, or 0 when there's none (as
+        // std::map does).
+        std::size_t erase(address where);
 
         [[nodiscard]] auto begin() { return detail::values_iterator{rows_.begin()}; }
         [[nodiscard]] auto end() { return detail::values_iterator{rows_.end()}; }

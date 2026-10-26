@@ -114,6 +114,13 @@ int main() {
             for (auto &cell: row)
                 if (const auto *n = std::get_if<double>(&cell.value)) cell = *n * 10;
         CHECK_EQ(number(sheet, "C2"), 20.0);
+        // Erasing, as std::map does: a row goes with its last cell.
+        CHECK_EQ(sheet.erase("C2"), std::size_t{1});
+        CHECK_EQ(sheet.erase("C2"), std::size_t{0});
+        CHECK_EQ(sheet.erase("Z9"), std::size_t{0});
+        CHECK_EQ(sheet.size(), std::size_t{1});
+        CHECK_EQ(sheet.erase("A4"), std::size_t{1});
+        CHECK_EQ(sheet.size(), std::size_t{1}); // E4 is still there
     }
 
     SECTION("A workbook: its sheets by name");
@@ -196,6 +203,10 @@ int main() {
         CHECK_EQ(number(got, "A4"), 0.1);
         CHECK(std::get<bool>(got.at("D2").value) == false);
         CHECK(text(got, "D5") == "yes");
+        // As bytes: the same workbook.
+        const auto bytes = sc::office::excel::bytes(book);
+        CHECK(bytes.starts_with("PK"));
+        CHECK(text(sc::office::excel::read_from(bytes)["Prices"], "A2") == "Bread");
     }
 
     SECTION("Written the way Excel writes it");

@@ -42,4 +42,6 @@ namespace sc::office::excel {
     // workbook without sheets, a sheet name Excel doesn't take (one read from a file) or a number
     // that isn't finite.
     void write(const workbook &book, const std::filesystem::path &file);
+    // What write() writes, as bytes: to send, or keep in memory.
+    [[nodiscard]] std::string bytes(const workbook &book);
 }

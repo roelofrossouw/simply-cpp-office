@@ -20,4 +20,12 @@ namespace sc::office::excel {
         if (where.row >= max_rows || where.column >= max_columns) throw std::out_of_range("excel: cell beyond XFD1048576");
         return rows_.try_emplace(where.row, where.row).first->second[where.column];
     }
+
+    std::size_t sheet::erase(const address where) {
+        const auto found = rows_.find(where.row);
+        if (found == rows_.end()) return 0;
+        const auto removed = found->second.erase(where.column);
+        if (found->second.empty()) rows_.erase(found);
+        return removed;
+    }
 }

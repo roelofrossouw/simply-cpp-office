@@ -24,6 +24,8 @@ namespace sc::office::excel {
         // std::out_of_range beyond column XFD. On a const row it's at().
         cell &operator[](std::size_t column);
         [[nodiscard]] const cell &operator[](const std::size_t column) const { return at(column); }
+        // Removes the cell in that column: 1, or 0 when there's none (as std::map does).
+        std::size_t erase(const std::size_t column) { return cells_.erase(column); }
 
         [[nodiscard]] auto begin() { return detail::values_iterator{cells_.begin()}; }
         [[nodiscard]] auto end() { return detail::values_iterator{cells_.end()}; }

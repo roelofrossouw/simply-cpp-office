@@ -56,10 +56,11 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
 - **Addresses** (`excel::address`): `{row, column}`, or Excel's name, `"B3"`; `name()` gives it
   back, `column_name(26)` gives `"AA"`.
 - **Rows** (`excel::row`): the cells that are set, in column order; `index()`, `contains(column)`,
-  `at(column)`, `row[column]`, `size()`, `empty()`.
+  `at(column)`, `row[column]`, `erase(column)`, `size()`, `empty()`.
 - **Sheets** (`excel::sheet`): `name()`; the rows that have cells, in order. `contains(address)`;
   `at(address)` throws `std::out_of_range` when there's no such cell; `sheet[address]` adds it
-  (empty) when there's none, as `std::map` does (on a const sheet it's `at()`).
+  (empty) when there's none, as `std::map` does (on a const sheet it's `at()`); `erase(address)`
+  removes it, and its row with its last cell.
 - **Workbooks** (`excel::workbook`): the sheets in order, `size()`, `empty()`, `front()`.
   `contains(name)`, `at(name)` and `book[name]` find a sheet ignoring case, as Excel does;
   `book[name]` adds it when there's none (on a const workbook it's `at()`). `add(name)` adds one,
@@ -70,7 +71,7 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
   calculated (none when they never were, as in files some libraries write). A formula Excel keeps
   once for a range is given to each of its cells, its relative references moved. A file that
   isn't an `.xlsx` throws `std::runtime_error`.
-- **Writing** (`write(book, file)`): each cell's value and formula, text inline, no styles; Excel
+- **Writing** (`write(book, file)`, or `bytes(book)` for the file's bytes): each cell's value and formula, text inline, no styles; Excel
   calculates the formulas when it opens the file. It throws `std::invalid_argument` for a
   workbook without sheets or a number that isn't finite, and then leaves no file behind.
 

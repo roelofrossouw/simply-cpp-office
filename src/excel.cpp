@@ -4,12 +4,16 @@
 #include <sc_archive.h>
 #include <xml.h>
 
+#include <atomic>
 #include <cctype>
 #include <charconv>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
+#include <iterator>
 #include <locale>
 #include <map>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -367,5 +371,22 @@ namespace sc::office::excel {
         auto out = archive::create(file);
         for (auto &[name, bytes]: parts) out.add(name, std::move(bytes));
         out.close();
+    }
+
+    std::string bytes(const workbook &book) {
+        // sc-archive writes ZIP archives to files: one of our own, read back and removed.
+        static std::atomic<unsigned> made{0};
+        const auto file = std::filesystem::temp_directory_path() /
+                          ("sc-office-excel-" + std::to_string(std::random_device{}()) + "-" + std::to_string(made++) + ".xlsx");
+        struct removed {
+            std::filesystem::path file;
+            ~removed() {
+                std::error_code ignored;
+                std::filesystem::remove(file, ignored);
+            }
+        } cleanup{file};
+        write(book, file);
+        std::ifstream in{file, std::ios::binary};
+        return {std::istreambuf_iterator<char>{in}, {}};
     }
 }
