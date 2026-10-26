@@ -41,6 +41,7 @@ if (SC_OFFICE_BUILD_TESTS)
     add_subdirectory(tests sc-office-test)
 endif ()
 
-add_sc_example(sc-office-demo)
+add_sc_example(sc-office-word-demo)
+add_sc_example(sc-office-excel-demo)
 
 package_sc_module(DEV_DEPENDS "simply-cpp-dev (>= 1.20.0~)" "simply-cpp-archive-dev (>= 1.0.0~)" "simply-cpp-web-dev (>= 1.4.7~)")

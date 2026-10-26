@@ -80,14 +80,12 @@ charts.
 **TODO:** pictures in `.xlsx` and `.pptx`. The old binary `.doc` and `.xls` formats aren't
 planned.
 
-## Demo
+## Demos
 
-`sc-office-demo FILE [--save FOLDER]` lists a `.docx`'s pictures in order, or
-writes them into a folder as they're stored. For an `.xlsx` it prints each
-sheet's cells with their values and formulas; `sc-office-demo --write FILE`
-writes a small workbook.
+`sc-office-word-demo FILE [--save FOLDER]` lists a `.docx`'s pictures in order,
+or writes them into a folder as they're stored.
 
-<!-- sc-example: examples/sc-office-demo.cpp -->
+<!-- sc-example: examples/sc-office-word-demo.cpp -->
 ```cpp
 const auto pictures = sc::office::word::images(args.as<std::string>("file"));
 const std::filesystem::path folder = args.as<std::string>("save");
@@ -97,6 +95,21 @@ for (const auto &picture: pictures) {
     if (!folder.empty()) std::ofstream{folder / picture.name, std::ios::binary} << picture.bytes;
 }
 std::cout << pictures.size() << " pictures\n";
+```
+<!-- /sc-example -->
+
+`sc-office-excel-demo FILE` prints an `.xlsx`'s cells, sheet by sheet, with
+their values and formulas; `sc-office-excel-demo --write FILE` writes a small
+workbook.
+
+<!-- sc-example: examples/sc-office-excel-demo.cpp -->
+```cpp
+for (const auto &sheet: sc::office::excel::read(file)) {
+    std::cout << "== " << sheet.name() << '\n';
+    for (const auto &row: sheet)
+        for (const auto &cell: row)
+            std::cout << cell.name() << '\t' << text_of(cell.value) << (cell.formula.empty() ? "" : "\t" + cell.formula) << '\n';
+}
 ```
 <!-- /sc-example -->
 
