@@ -4,6 +4,7 @@
 #include <sc_archive.h>
 #include <xml.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cctype>
 #include <charconv>
@@ -13,6 +14,7 @@
 #include <iterator>
 #include <locale>
 #include <map>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -158,6 +160,137 @@ namespace sc::office::excel {
             return out;
         }
 
+        // Excel's 64 indexed colours, for files that name colours by number (indexed="10").
+        constexpr unsigned indexed_colors[64] = {
+            0x000000, 0xFFFFFF, 0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00, 0xFF00FF, 0x00FFFF, 0x000000, 0xFFFFFF, 0xFF0000,
+            0x00FF00, 0x0000FF, 0xFFFF00, 0xFF00FF, 0x00FFFF, 0x800000, 0x008000, 0x000080, 0x808000, 0x800080, 0x008080,
+            0xC0C0C0, 0x808080, 0x9999FF, 0x993366, 0xFFFFCC, 0xCCFFFF, 0x660066, 0xFF8080, 0x0066CC, 0xCCCCFF, 0x000080,
+            0xFF00FF, 0xFFFF00, 0x00FFFF, 0x800080, 0x800000, 0x008080, 0x0000FF, 0x00CCFF, 0xCCFFFF, 0xCCFFCC, 0xFFFF99,
+            0x99CCFF, 0xFF99CC, 0xCC99FF, 0xFFCC99, 0x3366FF, 0x33CCCC, 0x99CC00, 0xFFCC00, 0xFF9900, 0xFF6600, 0x666699,
+            0x969696, 0x003366, 0x339966, 0x003300, 0x333300, 0x993300, 0x993366, 0x333399, 0x333333};
+
+        sc::color rgb_color(const unsigned rgb) { return sc::color::from_web(static_cast<int>(rgb >> 16), static_cast<int>((rgb >> 8) & 0xFF), static_cast<int>(rgb & 0xFF)); }
+
+        // "FFC00000" (alpha first) or "C00000".
+        std::optional<sc::color> hex_color(const std::string_view text) {
+            const auto hex = text.size() == 8 ? text.substr(2) : text;
+            unsigned rgb = 0;
+            if (hex.size() != 6 || std::from_chars(hex.data(), hex.data() + 6, rgb, 16).ptr != hex.data() + 6) return std::nullopt;
+            return rgb_color(rgb);
+        }
+
+        // A colour lightened (tint above 0) or darkened (below), as Excel does: its HSL lightness moved
+        // toward white or black.
+        sc::color tinted(const sc::color &color, const double tint) {
+            const double r = color.red(), g = color.green(), b = color.blue();
+            const double high = std::max({r, g, b}), low = std::min({r, g, b});
+            double hue = 0, saturation = 0, lightness = (high + low) / 2;
+            if (high != low) {
+                const double range = high - low;
+                saturation = lightness > 0.5 ? range / (2 - high - low) : range / (high + low);
+                hue = high == r ? (g - b) / range + (g < b ? 6 : 0) : high == g ? (b - r) / range + 2 : (r - g) / range + 4;
+                hue /= 6;
+            }
+            lightness = tint < 0 ? lightness * (1 + tint) : lightness * (1 - tint) + tint;
+            if (saturation == 0) return {lightness, lightness, lightness};
+            const double q = lightness < 0.5 ? lightness * (1 + saturation) : lightness + saturation - lightness * saturation;
+            const double p = 2 * lightness - q;
+            const auto channel = [&](double t) {
+                if (t < 0) t += 1;
+                if (t > 1) t -= 1;
+                if (t < 1.0 / 6) return p + (q - p) * 6 * t;
+                if (t < 0.5) return q;
+                if (t < 2.0 / 3) return p + (q - p) * (2.0 / 3 - t) * 6;
+                return p;
+            };
+            return {channel(hue + 1.0 / 3), channel(hue), channel(hue - 1.0 / 3)};
+        }
+
+        // A colour as styles.xml gives one: rgb="FFC00000", theme="4" (with a tint="0.4"), indexed="10".
+        // Automatic, or one that can't be told, is none.
+        std::optional<sc::color> color_of(const web::element &c, const std::vector<sc::color> &theme) {
+            std::optional<sc::color> found;
+            if (const auto rgb = c["rgb"]; !rgb.empty()) {
+                found = hex_color(rgb);
+            } else if (const auto index = c["theme"]; !index.empty()) {
+                if (const auto at = static_cast<std::size_t>(number(index)); at < theme.size()) found = theme[at];
+            } else if (const auto index = c["indexed"]; !index.empty()) {
+                if (const auto at = static_cast<std::size_t>(number(index)); at < std::size(indexed_colors)) found = rgb_color(indexed_colors[at]);
+            }
+            if (const auto tint = c["tint"]; found && !tint.empty() && number(tint) != 0) found = tinted(*found, std::clamp(number(tint), -1.0, 1.0));
+            return found;
+        }
+
+        // The theme's colours in the order styles.xml counts them: light 1, dark 1, light 2, dark 2,
+        // the six accents, then the two hyperlink colours.
+        std::vector<sc::color> theme_colors(const archive::reader &book, const std::string &path) {
+            if (path.empty() || !book.contains(path)) return {};
+            const auto document = web::document::parse(book.read(path));
+            const auto elements = document.root().child("themeElements");
+            const auto scheme = elements ? elements->child("clrScheme") : std::nullopt;
+            if (!scheme) return {};
+            std::map<std::string, sc::color, std::less<>> named;
+            for (const auto &each: scheme->children()) {
+                std::optional<sc::color> found;
+                if (const auto rgb = each.child("srgbClr")) found = hex_color((*rgb)["val"]);
+                else if (const auto system = each.child("sysClr")) found = hex_color((*system)["lastClr"]);
+                if (found) named.emplace(std::string{each.name()}, *found);
+            }
+            std::vector<sc::color> out;
+            for (const auto name: {"lt1", "dk1", "lt2", "dk2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "hlink", "folHlink"}) {
+                const auto found = named.find(name);
+                if (found == named.end()) break;
+                out.push_back(found->second);
+            }
+            return out;
+        }
+
+        // The styles cells point to (s="3": cellXfs' fourth), as excel::style: what's the same as the
+        // workbook's default font is left unset.
+        std::vector<style> styles_of(const archive::reader &book, const std::string &path, const std::vector<sc::color> &theme) {
+            if (path.empty() || !book.contains(path)) return {};
+            const auto document = web::document::parse(book.read(path));
+            const auto &root = document.root();
+            std::vector<font> fonts;
+            if (const auto list = root.child("fonts")) {
+                for (const auto &each: list->children("font")) {
+                    font made;
+                    if (const auto size = each.child("sz"); size && !(*size)["val"].empty()) made.size = number((*size)["val"]);
+                    if (const auto color = each.child("color")) made.color = color_of(*color, theme);
+                    if (const auto bold = each.child("b")) made.bold = (*bold)["val"] != "0" && (*bold)["val"] != "false";
+                    fonts.push_back(made);
+                }
+            }
+            if (!fonts.empty()) {
+                const auto plain = fonts.front();
+                for (auto &each: fonts) {
+                    if (each.size && plain.size && each.size->points() == plain.size->points()) each.size.reset();
+                    if (each.color == plain.color) each.color.reset();
+                }
+            }
+            std::vector<std::optional<sc::color>> fills;
+            if (const auto list = root.child("fills")) {
+                for (const auto &each: list->children("fill")) {
+                    std::optional<sc::color> background;
+                    if (const auto pattern = each.child("patternFill"); pattern && (*pattern)["patternType"] == "solid")
+                        if (const auto color = pattern->child("fgColor")) background = color_of(*color, theme);
+                    fills.push_back(background);
+                }
+            }
+            std::vector<style> out;
+            if (const auto list = root.child("cellXfs")) {
+                for (const auto &xf: list->children("xf")) {
+                    style made;
+                    if (const auto id = xf["fontId"]; !id.empty())
+                        if (const auto at = static_cast<std::size_t>(number(id)); at < fonts.size()) made.font = fonts[at];
+                    if (const auto id = xf["fillId"]; !id.empty())
+                        if (const auto at = static_cast<std::size_t>(number(id)); at < fills.size()) made.background = fills[at];
+                    out.push_back(made);
+                }
+            }
+            return out;
+        }
+
         // The formulas a sheet keeps once for a range, by their si: the first cell's formula and place.
         struct shared_formula {
             std::string text;
@@ -201,10 +334,22 @@ namespace sc::office::excel {
             return text.empty() ? std::string{} : "=" + text;
         }
 
-        sheet sheet_of(std::string name, const archive::reader &book, const std::string &path, const std::vector<std::string> &shared) {
+        sheet sheet_of(std::string name, const archive::reader &book, const std::string &path, const std::vector<std::string> &shared,
+                       const std::vector<style> &styles) {
             sheet out{std::move(name)};
             if (!book.contains(path)) return out;
             const auto document = web::document::parse(book.read(path));
+            // Columns given a width; others (styled only) keep Excel's default.
+            if (const auto columns = document.root().child("cols")) {
+                for (const auto &col: columns->children("col")) {
+                    const auto custom = col["customWidth"];
+                    if (col["width"].empty() || (custom != "1" && custom != "true")) continue;
+                    const auto width = std::clamp(number(col["width"]), 0.0, 255.0);
+                    const auto first = static_cast<std::size_t>(number(col["min"]));
+                    const auto last = std::min(static_cast<std::size_t>(number(col["max"])), max_columns);
+                    for (auto column = std::max<std::size_t>(first, 1); column <= last; ++column) out.width(column - 1, width);
+                }
+            }
             const auto data = document.root().child("sheetData");
             if (!data) return out;
             std::map<std::string, shared_formula> formulas;
@@ -220,10 +365,14 @@ namespace sc::office::excel {
                     next_column = where.column + 1;
                     auto what = cell_value(c, shared);
                     auto formula = cell_formula(c, where, formulas);
-                    if (std::holds_alternative<std::monostate>(what) && formula.empty()) continue;
+                    style look;
+                    if (const auto s = c["s"]; !s.empty())
+                        if (const auto at = static_cast<std::size_t>(number(s)); at < styles.size()) look = styles[at];
+                    if (std::holds_alternative<std::monostate>(what) && formula.empty() && look.empty()) continue;
                     auto &cell = out[where];
                     cell.value = std::move(what);
                     cell.formula = std::move(formula);
+                    cell.style = std::move(look);
                 }
             }
             return out;
@@ -232,12 +381,18 @@ namespace sc::office::excel {
         std::deque<sheet> sheets_of(const archive::reader &book) {
             if (!book.contains("xl/workbook.xml")) throw std::runtime_error("excel: not an .xlsx (no xl/workbook.xml)");
             std::map<std::string, std::string> targets; // relationship id -> part
+            std::string styles_path, theme_path;
             if (book.contains("xl/_rels/workbook.xml.rels")) {
                 const auto rels = web::document::parse(book.read("xl/_rels/workbook.xml.rels"));
-                for (const auto &relationship: rels.root().children("Relationship"))
-                    if (relationship["TargetMode"] != "External")
-                        targets[std::string{relationship["Id"]}] = part_path("xl/", relationship["Target"]);
+                for (const auto &relationship: rels.root().children("Relationship")) {
+                    if (relationship["TargetMode"] == "External") continue;
+                    auto path = part_path("xl/", relationship["Target"]);
+                    if (relationship["Type"].ends_with("/styles")) styles_path = path;
+                    else if (relationship["Type"].ends_with("/theme")) theme_path = path;
+                    targets[std::string{relationship["Id"]}] = std::move(path);
+                }
             }
+            const auto styles = styles_of(book, styles_path, theme_colors(book, theme_path));
             std::vector<std::string> shared;
             if (book.contains("xl/sharedStrings.xml")) {
                 const auto strings = web::document::parse(book.read("xl/sharedStrings.xml"));
@@ -249,7 +404,7 @@ namespace sc::office::excel {
             if (const auto sheets = document.root().child("sheets")) {
                 for (const auto &each: sheets->children("sheet")) {
                     const auto target = targets.find(attribute_named(each, "id"));
-                    out.push_back(sheet_of(std::string{each["name"]}, book, target == targets.end() ? std::string{} : target->second, shared));
+                    out.push_back(sheet_of(std::string{each["name"]}, book, target == targets.end() ? std::string{} : target->second, shared, styles));
                 }
             }
             return out;
@@ -286,12 +441,75 @@ namespace sc::office::excel {
         constexpr std::string_view xml_declaration = R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>)" "\n";
         constexpr std::string_view relationships = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
-        // A cell's XML: its formula (without the =) and the value it holds.
-        std::string cell_xml(const cell &each) {
+        // The styles a workbook's cells use, numbered as they're met (0 is the plain one), and the fonts
+        // and fills they're made of: styles.xml.
+        class style_table {
+        public:
+            // The style's number, added when it's new.
+            std::size_t index(const style &look) {
+                if (look.empty()) return 0;
+                return position(styles_, look) + 1;
+            }
+
+            [[nodiscard]] std::string xml() {
+                std::vector<font> fonts{font{}};
+                std::vector<sc::color> fills;
+                std::string xfs = R"(<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>)";
+                for (const auto &each: styles_) {
+                    const auto font_id = position(fonts, each.font);
+                    const auto fill_id = each.background ? position(fills, *each.background) + 2 : 0; // after none and gray125
+                    xfs += R"(<xf numFmtId="0" fontId=")" + std::to_string(font_id) + R"(" fillId=")" + std::to_string(fill_id) + R"(" borderId="0" xfId="0")" +
+                           (font_id ? R"( applyFont="1")" : "") + (fill_id ? R"( applyFill="1")" : "") + "/>";
+                }
+                std::string xml{xml_declaration};
+                xml += R"(<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count=")" + std::to_string(fonts.size()) + R"(">)";
+                for (const auto &each: fonts) {
+                    if (each.size && !(each.size->points() >= 1 && each.size->points() <= 409))
+                        throw std::invalid_argument("excel: a font's size is from 1 to 409 points");
+                    xml += "<font>";
+                    if (each.bold) xml += "<b/>";
+                    xml += R"(<sz val=")" + number_text(each.size ? each.size->points() : 11) + R"("/>)";
+                    if (each.color) xml += R"(<color rgb=")" + argb(*each.color) + R"("/>)";
+                    xml += R"(<name val="Calibri"/><family val="2"/><scheme val="minor"/></font>)";
+                }
+                xml += R"(</fonts><fills count=")" + std::to_string(fills.size() + 2) +
+                       R"("><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>)";
+                for (const auto &each: fills)
+                    xml += R"(<fill><patternFill patternType="solid"><fgColor rgb=")" + argb(each) + R"("/><bgColor indexed="64"/></patternFill></fill>)";
+                xml += R"(</fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>)"
+                       R"(<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count=")" +
+                       std::to_string(styles_.size() + 1) + R"(">)" + xfs +
+                       R"(</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>)";
+                return xml;
+            }
+
+        private:
+            // Where what is in list, added at its end when it isn't there.
+            template<typename T>
+            static std::size_t position(std::vector<T> &list, const T &what) {
+                const auto found = std::find(list.begin(), list.end(), what);
+                if (found != list.end()) return static_cast<std::size_t>(found - list.begin());
+                list.push_back(what);
+                return list.size() - 1;
+            }
+
+            // "FFC00000": opaque, as Excel writes colours.
+            static std::string argb(const sc::color &color) {
+                auto hex = color.to_hex().substr(1);
+                for (auto &c: hex) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                return "FF" + hex;
+            }
+
+            std::vector<style> styles_;
+        };
+
+        // A cell's XML: its style's number, its formula (without the =) and the value it holds.
+        std::string cell_xml(const cell &each, style_table &styles) {
             std::string formula;
             if (!each.formula.empty())
                 formula = "<f>" + xml_text(each.formula.starts_with('=') ? std::string_view{each.formula}.substr(1) : std::string_view{each.formula}) + "</f>";
-            const auto start = R"(<c r=")" + each.name() + '"';
+            auto start = R"(<c r=")" + each.name() + '"';
+            if (const auto index = styles.index(each.style)) start += R"( s=")" + std::to_string(index) + '"';
             if (const auto *text = std::get_if<std::string>(&each.value)) {
                 if (!formula.empty()) return start + R"( t="str">)" + formula + "<v>" + xml_text(*text) + "</v></c>";
                 return start + R"( t="inlineStr"><is><t xml:space="preserve">)" + xml_text(*text) + "</t></is></c>";
@@ -301,13 +519,25 @@ namespace sc::office::excel {
             return start + ">" + formula + "</c>";
         }
 
-        std::string sheet_xml(const sheet &each) {
+        std::string sheet_xml(const sheet &each, style_table &styles) {
             std::string xml{xml_declaration};
-            xml += R"(<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>)";
+            xml += R"(<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">)";
+            if (const auto &widths = each.widths(); !widths.empty()) { // neighbours of one width as one <col>
+                xml += "<cols>";
+                for (auto at = widths.begin(); at != widths.end();) {
+                    auto last = at;
+                    while (std::next(last) != widths.end() && std::next(last)->first == last->first + 1 && std::next(last)->second == at->second) ++last;
+                    xml += R"(<col min=")" + std::to_string(at->first + 1) + R"(" max=")" + std::to_string(last->first + 1) + R"(" width=")" +
+                           number_text(at->second) + R"(" customWidth="1"/>)";
+                    at = std::next(last);
+                }
+                xml += "</cols>";
+            }
+            xml += "<sheetData>";
             for (const auto &row: each) {
                 std::string cells;
                 for (const auto &cell: row)
-                    if (!cell.empty()) cells += cell_xml(cell);
+                    if (!cell.empty() || !cell.style.empty()) cells += cell_xml(cell, styles);
                 if (!cells.empty()) xml += R"(<row r=")" + std::to_string(row.index() + 1) + R"(">)" + cells + "</row>";
             }
             return xml + "</sheetData></worksheet>";
@@ -348,6 +578,10 @@ namespace sc::office::excel {
                  R"(<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>)";
         std::string sheets, rels{xml_declaration};
         rels += R"(<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">)";
+        // The sheets first: the styles their cells use make styles.xml.
+        style_table styles;
+        std::vector<std::string> sheet_parts;
+        for (const auto &each: book) sheet_parts.push_back(sheet_xml(each, styles));
         for (std::size_t i = 1; i <= book.size(); ++i) {
             const auto n = std::to_string(i);
             types += R"(<Override PartName="/xl/worksheets/sheet)" + n +
@@ -355,6 +589,9 @@ namespace sc::office::excel {
             sheets += R"(<sheet name=")" + xml_text(names[i - 1]) + R"(" sheetId=")" + n + R"(" r:id="rId)" + n + R"("/>)";
             rels += R"(<Relationship Id="rId)" + n + R"(" Type=")" + std::string{relationships} + R"(/worksheet" Target="worksheets/sheet)" + n + R"(.xml"/>)";
         }
+        const auto styles_id = "rId" + std::to_string(book.size() + 1);
+        types += R"(<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>)";
+        rels += R"(<Relationship Id=")" + styles_id + R"(" Type=")" + std::string{relationships} + R"(/styles" Target="styles.xml"/>)";
         parts.emplace_back("[Content_Types].xml", types + "</Types>");
         parts.emplace_back("_rels/.rels", std::string{xml_declaration} +
                                               R"(<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">)"
@@ -365,8 +602,8 @@ namespace sc::office::excel {
                                                   std::string{relationships} + R"("><sheets>)" + sheets + "</sheets>" +
                                                   (formulas ? R"(<calcPr fullCalcOnLoad="1"/>)" : "") + "</workbook>");
         parts.emplace_back("xl/_rels/workbook.xml.rels", rels + "</Relationships>");
-        std::size_t n = 0;
-        for (const auto &each: book) parts.emplace_back("xl/worksheets/sheet" + std::to_string(++n) + ".xml", sheet_xml(each));
+        parts.emplace_back("xl/styles.xml", styles.xml());
+        for (std::size_t i = 0; i < sheet_parts.size(); ++i) parts.emplace_back("xl/worksheets/sheet" + std::to_string(i + 1) + ".xml", std::move(sheet_parts[i]));
 
         auto out = archive::create(file);
         for (auto &[name, bytes]: parts) out.add(name, std::move(bytes));

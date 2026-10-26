@@ -1,5 +1,5 @@
 // Prints the cells of an Excel workbook, sheet by sheet, with their values and formulas, or writes
-// a small one with --write.
+// a small one with --write: a header in bold white on blue, widened columns, a total in bold.
 //
 //     sc-office-excel-demo prices.xlsx
 //     sc-office-excel-demo --write sample.xlsx
@@ -24,17 +24,24 @@ namespace {
     }
 
     void sample(const std::string &file) {
-        sc::office::excel::workbook book;
+        using namespace sc::office::excel;
+        workbook book;
         auto &prices = book["Prices"];
+        const style header{.font = {.size = 12, .color = sc::color::White, .bold = true}, .background = sc::color{"#4472c4"}};
         prices["A1"] = "Item";
         prices["B1"] = "Price";
+        prices["A1"].style = prices["B1"].style = header;
         prices["A2"] = "Bread";
         prices["B2"] = 18.5;
         prices["A3"] = "Milk";
         prices["B3"] = 21.0;
         prices["A4"] = "Total";
         prices["B4"].formula = "=SUM(B2:B3)";
-        sc::office::excel::write(book, file);
+        prices["A4"].style.font.bold = prices["B4"].style.font.bold = true;
+        prices["B4"].style.font.color = sc::color{"#c00000"};
+        prices.width("A", 20);
+        prices.width("B", 12);
+        write(book, file);
         std::cout << "wrote " << file << '\n';
     }
 }

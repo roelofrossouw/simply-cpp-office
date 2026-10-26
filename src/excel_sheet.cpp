@@ -1,5 +1,6 @@
 #include "excel_sheet.h"
 
+#include <cmath>
 #include <stdexcept>
 
 namespace sc::office::excel {
@@ -27,5 +28,21 @@ namespace sc::office::excel {
         const auto removed = found->second.erase(where.column);
         if (found->second.empty()) rows_.erase(found);
         return removed;
+    }
+
+    std::optional<double> sheet::width(const std::size_t column) const {
+        if (const auto found = widths_.find(column); found != widths_.end()) return found->second;
+        return std::nullopt;
+    }
+
+    void sheet::width(const std::size_t column, const std::optional<double> characters) {
+        if (column >= max_columns) throw std::out_of_range("excel: a column beyond XFD");
+        if (!characters) {
+            widths_.erase(column);
+            return;
+        }
+        if (!std::isfinite(*characters) || *characters < 0 || *characters > 255)
+            throw std::out_of_range("excel: a column's width is from 0 to 255 characters");
+        widths_[column] = *characters;
     }
 }

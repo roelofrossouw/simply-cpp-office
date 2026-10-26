@@ -31,4 +31,7 @@ namespace sc::office::excel {
 
     // A column's letters: 0 as "A", 26 as "AA".
     [[nodiscard]] std::string column_name(std::size_t column);
+    // A column's number from its letters: "A" (or "a") as 0, "AA" as 26. Throws
+    // std::invalid_argument for anything else ("A1", "XFE").
+    [[nodiscard]] std::size_t column_index(std::string_view letters);
 }

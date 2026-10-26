@@ -56,6 +56,60 @@ namespace {
     const std::string sheet2 = R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="2"><c r="B2"><v>-3E-2</v></c></row></sheetData></worksheet>)";
 
+    // Styles as Excel writes them: theme colours with tints, indexed and rgb ones, a default font
+    // of 11 points in the theme's dark 1.
+    const std::string styled_rels = R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>)";
+    const std::string styled_workbook = R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="Styled" sheetId="1" r:id="rId1"/></sheets>
+</workbook>)";
+    const std::string theme = R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office Theme"><a:themeElements><a:clrScheme name="Office">
+  <a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>
+  <a:dk2><a:srgbClr val="44546A"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2>
+  <a:accent1><a:srgbClr val="4472C4"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2>
+  <a:accent3><a:srgbClr val="A5A5A5"/></a:accent3><a:accent4><a:srgbClr val="FFC000"/></a:accent4>
+  <a:accent5><a:srgbClr val="5B9BD5"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6>
+  <a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink>
+</a:clrScheme></a:themeElements></a:theme>)";
+    const std::string styles = R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="4">
+    <font><sz val="11"/><color theme="1"/><name val="Calibri"/></font>
+    <font><b/><sz val="16"/><color theme="0"/><name val="Calibri"/></font>
+    <font><b val="0"/><sz val="11"/><color rgb="FFC00000"/><name val="Calibri"/></font>
+    <font><sz val="11"/><color indexed="10"/><name val="Calibri"/></font>
+  </fonts>
+  <fills count="4">
+    <fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor theme="4" tint="0.79998168889431442"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor theme="4"/><bgColor indexed="64"/></patternFill></fill>
+  </fills>
+  <cellXfs count="5">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+    <xf numFmtId="0" fontId="3" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+    <xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0"/>
+  </cellXfs>
+</styleSheet>)";
+    const std::string styled_sheet = R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <cols>
+    <col min="1" max="1" width="20.7109375" customWidth="1"/>
+    <col min="2" max="4" width="9.140625" customWidth="1"/>
+    <col min="5" max="16384" width="9.140625" style="1"/>
+  </cols>
+  <sheetData>
+    <row r="1"><c r="A1" s="1" t="inlineStr"><is><t>Header</t></is></c><c r="B1" s="2"><v>1</v></c><c r="C1" s="3"/><c r="D1" s="4"/><c r="E1" s="9"><v>2</v></c></row>
+  </sheetData>
+</worksheet>)";
+
     bool is_empty(const value &v) { return std::holds_alternative<std::monostate>(v); }
 
     std::string text(const sc::office::excel::sheet &sheet, const address where) { return std::get<std::string>(sheet.at(where).value); }
@@ -257,6 +311,108 @@ int main() {
         const auto from_memory = sc::office::excel::read_from(std::string{std::istreambuf_iterator<char>{in}, {}});
         CHECK_EQ(from_memory.size(), std::size_t{2});
         CHECK_EQ(from_memory.at("Data & more").size(), book.at("Data & more").size());
+    }
+
+    SECTION("Styles and column widths, written and read back");
+    {
+        using sc::office::excel::column_index;
+        CHECK_EQ(column_index("A"), std::size_t{0});
+        CHECK_EQ(column_index("aa"), std::size_t{26});
+        CHECK_EQ(column_index("XFD"), std::size_t{16383});
+        for (const auto *wrong: {"", "A1", "XFE", "-"}) CHECK_THROWS_AS((void) column_index(wrong), std::invalid_argument);
+
+        sc::office::excel::workbook book;
+        auto &sheet = book["Styled"];
+        sheet["A1"] = "Header";
+        sheet["A1"].style = {.font = {.size = 14, .color = sc::color{"#1f4e79"}, .bold = true}, .background = sc::color{"#ddebf7"}};
+        sheet["B1"] = "Bold";
+        sheet["B1"].style.font.bold = true;
+        sheet["C1"].style.background = sc::color::Red; // a style, no value: kept
+        sheet["A2"] = 1.0;
+        sheet["A2"].style = sheet["A1"].style;          // the same style: written once
+        sheet["B2"] = 2.0;
+        sheet["B2"] = 3.0;                              // setting the value keeps the style
+        sheet.width("A", 30);
+        sheet.width(1, 12.5);
+        sheet.width("C", 12.5);                         // B and C: one <col>
+        sheet.width("E", 4);
+        CHECK(sheet.width("A") == 30.0);
+        CHECK(!sheet.width("D"));
+        sheet.width("E", std::nullopt);
+        CHECK(!sheet.width(4));
+        CHECK_EQ(sheet.widths().size(), std::size_t{3});
+        CHECK_THROWS_AS(sheet.width("A", -1), std::out_of_range);
+        CHECK_THROWS_AS(sheet.width("A", 256), std::out_of_range);
+        CHECK_THROWS_AS(sheet.width("A", std::numeric_limits<double>::quiet_NaN()), std::out_of_range);
+        CHECK_THROWS_AS(sheet.width(sc::office::excel::max_columns, 1), std::out_of_range);
+        CHECK(sheet.width("A") == 30.0);
+
+        const auto bytes = sc::office::excel::bytes(book);
+        const auto archive = sc::archive::from_memory(bytes);
+        CHECK(archive.read("xl/styles.xml").find(R"(<cellXfs count="4">)") != std::string::npos); // plain, A1 and A2, B1, C1
+        const auto xml = archive.read("xl/worksheets/sheet1.xml");
+        CHECK(xml.find(R"(<col min="2" max="3" width="12.5" customWidth="1"/>)") != std::string::npos);
+        CHECK(xml.find(R"(<c r="B2"><v>3</v></c>)") != std::string::npos); // plain: no s=
+
+        const auto back = sc::office::excel::read_from(bytes);
+        const auto &got = back["Styled"];
+        const auto &header = got.at("A1").style;
+        CHECK(header.font.bold);
+        CHECK(header.font.size && header.font.size->points() == 14);
+        CHECK(header.font.color && header.font.color->to_hex() == "#1f4e79");
+        CHECK(header.background && header.background->to_hex() == "#ddebf7");
+        CHECK(got.at("A2").style == header);
+        CHECK(got.at("B1").style.font.bold && !got.at("B1").style.font.size && !got.at("B1").style.font.color);
+        CHECK(got.contains("C1") && got.at("C1").style.background && got.at("C1").style.background->to_hex() == "#ff0000");
+        CHECK(got.at("B2").style.empty());
+        CHECK(got.widths() == sheet.widths());
+
+        sheet["D1"].style.font.size = 500;
+        CHECK_THROWS_AS((void) sc::office::excel::bytes(book), std::invalid_argument);
+    }
+
+    SECTION("Styles and column widths the way Excel writes them");
+    {
+        const auto file = root / "styled.xlsx";
+        {
+            auto out = sc::archive::create(file);
+            out.add("xl/workbook.xml", styled_workbook);
+            out.add("xl/_rels/workbook.xml.rels", styled_rels);
+            out.add("xl/theme/theme1.xml", theme);
+            out.add("xl/styles.xml", styles);
+            out.add("xl/worksheets/sheet1.xml", styled_sheet);
+            out.close();
+        }
+        const auto book = sc::office::excel::read(file);
+        const auto &sheet = book["Styled"];
+        // Bold, 16 points, the theme's light 1 (white) on accent 1.
+        const auto &header = sheet.at("A1").style;
+        CHECK(header.font.bold);
+        CHECK(header.font.size && header.font.size->points() == 16);
+        CHECK(header.font.color && header.font.color->to_hex() == "#ffffff");
+        CHECK(header.background && header.background->to_hex() == "#4472c4");
+        // Red text, not bold (b val="0"), the default size left unset.
+        const auto &red = sheet.at("B1").style;
+        CHECK(!red.font.bold && !red.font.size);
+        CHECK(red.font.color && red.font.color->to_hex() == "#c00000");
+        // Indexed 10 (red) on accent 1 lightened 80%, as Excel shows it: #dae3f3 (or a step off).
+        CHECK(sheet.contains("C1"));
+        if (sheet.contains("C1")) {
+            const auto &tinted = sheet.at("C1").style;
+            CHECK(tinted.font.color && tinted.font.color->to_hex() == "#ff0000");
+            CHECK(tinted.background);
+            if (tinted.background) {
+                CHECK(std::abs(tinted.background->red() * 255 - 0xDA) < 1.5);
+                CHECK(std::abs(tinted.background->green() * 255 - 0xE3) < 1.5);
+                CHECK(std::abs(tinted.background->blue() * 255 - 0xF3) < 1.5);
+            }
+        }
+        CHECK(!sheet.contains("D1"));                 // a date format only: nothing we keep
+        CHECK(sheet.at("E1").style.empty());          // a style that isn't there
+        CHECK_EQ(sheet.widths().size(), std::size_t{4}); // A, and B to D; not the styled rest
+        CHECK(sheet.width("A") == 20.7109375);
+        CHECK(sheet.width("D") == 9.140625);
+        CHECK(!sheet.width("E"));
     }
 
     SECTION("Not a workbook, and what can't be written");

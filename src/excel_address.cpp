@@ -22,6 +22,18 @@ namespace sc::office::excel {
         column = letters - 1;
     }
 
+    std::size_t column_index(const std::string_view letters) {
+        const auto wrong = [&] { return std::invalid_argument("excel: \"" + std::string{letters} + "\" isn't a column like B"); };
+        std::size_t column = 0;
+        for (const char c: letters) {
+            if (!std::isalpha(static_cast<unsigned char>(c))) throw wrong();
+            column = column * 26 + static_cast<std::size_t>(std::toupper(static_cast<unsigned char>(c)) - 'A' + 1);
+            if (column > max_columns) throw wrong();
+        }
+        if (column == 0) throw wrong();
+        return column - 1;
+    }
+
     std::string address::name() const { return column_name(column) + std::to_string(row + 1); }
 
     std::string column_name(std::size_t column) {

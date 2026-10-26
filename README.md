@@ -43,6 +43,10 @@ auto &prices = out["Prices"];            // added, as std::map would
 prices["A1"] = "Item";
 prices[{1, 1}] = 18.5;                   // B2: {row, column}, counted from 0
 prices["B3"].formula = "=B2*2";
+prices["A1"].style = {.font = {.size = 14, .color = sc::color::White, .bold = true},
+                      .background = sc::color{"#4472c4"}};
+prices["B3"].style.font.bold = true;
+prices.width("A", 20);                   // in characters, as Excel shows it
 sc::office::excel::write(out, "out.xlsx");
 ```
 
@@ -52,15 +56,21 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
   shows it; empty when there's none). A value (`excel::value`) is a `std::variant` of empty
   (`std::monostate`), a number (`double`), text (`std::string`, UTF-8) or `bool`. Dates are
   numbers, days since 1899-12-30 as Excel keeps them; an error such as `#DIV/0!` reads as its
-  text. `cell = value` sets the value; `name()` gives `"B3"`.
+  text. `cell = value` sets the value; `name()` gives `"B3"`. Its `style` (`excel::style`) is how
+  it looks: `font.size` (an `sc::distance`, so a plain number is points), `font.color` and
+  `background` (`sc::color`, a solid fill; alpha is left out), `font.bold`. What isn't set is
+  Excel's default (Calibri 11, automatic colour, no fill).
 - **Addresses** (`excel::address`): `{row, column}`, or Excel's name, `"B3"`; `name()` gives it
-  back, `column_name(26)` gives `"AA"`.
+  back, `column_name(26)` gives `"AA"` and `column_index("AA")` 26.
 - **Rows** (`excel::row`): the cells that are set, in column order; `index()`, `contains(column)`,
   `at(column)`, `row[column]`, `erase(column)`, `size()`, `empty()`.
 - **Sheets** (`excel::sheet`): `name()`; the rows that have cells, in order. `contains(address)`;
   `at(address)` throws `std::out_of_range` when there's no such cell; `sheet[address]` adds it
   (empty) when there's none, as `std::map` does (on a const sheet it's `at()`); `erase(address)`
-  removes it, and its row with its last cell.
+  removes it, and its row with its last cell. `width(column)` is a column's width in characters
+  (so many `0`s, as Excel shows it), none for Excel's default; `width(column, characters)` sets it
+  (0 to 255; `std::nullopt` for the default), the column by number or letters (`"B"`); `widths()`
+  lists them.
 - **Workbooks** (`excel::workbook`): the sheets in order, `size()`, `empty()`, `front()`.
   `contains(name)`, `at(name)` and `book[name]` find a sheet ignoring case, as Excel does;
   `book[name]` adds it when there's none (on a const workbook it's `at()`). `add(name)` adds one,
@@ -69,14 +79,17 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
 - **Reading** (`read(file)`, `read_from(bytes)`): shared and inline strings, rich text (its runs
   joined, phonetic readings left out), booleans, errors, formulas and the values they last
   calculated (none when they never were, as in files some libraries write). A formula Excel keeps
-  once for a range is given to each of its cells, its relative references moved. A file that
-  isn't an `.xlsx` throws `std::runtime_error`.
-- **Writing** (`write(book, file)`, or `bytes(book)` for the file's bytes): each cell's value and formula, text inline, no styles; Excel
-  calculates the formulas when it opens the file. It throws `std::invalid_argument` for a
-  workbook without sheets or a number that isn't finite, and then leaves no file behind.
+  once for a range is given to each of its cells, its relative references moved. Styles come with
+  their theme and indexed colours turned into `sc::color`s (tints applied), what's the same as the
+  workbook's default font left unset; a cell with a style and no value is kept. Column widths
+  are those set by hand (`customWidth`). A file that isn't an `.xlsx` throws `std::runtime_error`.
+- **Writing** (`write(book, file)`, or `bytes(book)` for the file's bytes): each cell's value,
+  formula and style, text inline, and the columns' widths; Excel calculates the formulas when it
+  opens the file. It throws `std::invalid_argument` for a workbook without sheets, a number that
+  isn't finite or a font size outside 1 to 409 points, and then leaves no file behind.
 
-Not covered: formatting, styles, number formats, column widths, merged cells, pictures and
-charts.
+Not covered yet: fonts other than Calibri, italics and underlines, borders, alignment, number
+formats, row heights, merged cells, pictures and charts.
 
 **TODO:** pictures in `.xlsx` and `.pptx`. The old binary `.doc` and `.xls` formats aren't
 planned.
@@ -101,7 +114,7 @@ std::cout << pictures.size() << " pictures\n";
 
 `sc-office-excel-demo FILE` prints an `.xlsx`'s cells, sheet by sheet, with
 their values and formulas; `sc-office-excel-demo --write FILE` writes a small
-workbook.
+workbook, with a styled header and widened columns.
 
 <!-- sc-example: examples/sc-office-excel-demo.cpp -->
 ```cpp
