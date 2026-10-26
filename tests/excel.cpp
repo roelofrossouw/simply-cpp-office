@@ -87,7 +87,7 @@ namespace {
     <font><b val="0"/><sz val="11"/><color rgb="FFC00000"/><name val="Calibri"/></font>
     <font><sz val="11"/><color indexed="10"/><name val="Calibri"/></font>
     <font><i/><u val="double"/><sz val="11"/><color theme="1"/><name val="Calibri"/></font>
-    <font><u/><sz val="11"/><color theme="1"/><name val="Calibri"/></font>
+    <font><strike/><u/><sz val="11"/><color theme="1"/><name val="Calibri"/></font>
   </fonts>
   <borders count="2">
     <border><left/><right/><top/><bottom/><diagonal/></border>
@@ -354,6 +354,7 @@ int main() {
         sheet["D2"] = "Fancy";
         sheet["D2"].style.font.italic = true;
         sheet["D2"].style.font.underline = underline::double_accounting;
+        sheet["D2"].style.font.strike = true;
         sheet["D2"].style.borders = sc::office::excel::borders::all({line::thin});
         sheet["D2"].style.borders.bottom = {line::doubled, sc::color{"#1f4e79"}};
         sheet["E2"].style.borders = sheet["D2"].style.borders; // the same borders: written once
@@ -390,7 +391,7 @@ int main() {
         CHECK(styles_xml.find(R"(<xf numFmtId="4" )") != std::string::npos);
         CHECK(styles_xml.find(R"(<alignment horizontal="center" vertical="top" wrapText="1" indent="1"/>)") != std::string::npos);
         CHECK(styles_xml.find(R"(<borders count="2">)") != std::string::npos);
-        CHECK(styles_xml.find(R"(<i/><u val="doubleAccounting"/>)") != std::string::npos);
+        CHECK(styles_xml.find(R"(<i/><strike/><u val="doubleAccounting"/>)") != std::string::npos);
         const auto xml = archive.read("xl/worksheets/sheet1.xml");
         CHECK(xml.find(R"(<col min="2" max="3" width="12.5" customWidth="1"/>)") != std::string::npos);
         CHECK(xml.find(R"(<c r="B2"><v>3</v></c>)") != std::string::npos); // plain: no s=
@@ -408,7 +409,7 @@ int main() {
         CHECK(got.at("B2").style.empty());
         CHECK(got.widths() == sheet.widths());
         const auto &fancy = got.at("D2").style;
-        CHECK(fancy.font.italic && fancy.font.underline == underline::double_accounting);
+        CHECK(fancy.font.italic && fancy.font.strike && fancy.font.underline == underline::double_accounting);
         CHECK(fancy.borders.left == (sc::office::excel::edge{line::thin}));
         CHECK(fancy.borders.top.line == line::thin && fancy.borders.right.line == line::thin);
         CHECK(fancy.borders.bottom.line == line::doubled && fancy.borders.bottom.color && fancy.borders.bottom.color->to_hex() == "#1f4e79");
@@ -492,15 +493,24 @@ int main() {
         sc::office::excel::workbook book;
         auto &sheet = book["Frozen"];
         sheet["A1"] = "Name";
-        sheet.hidden("C", true);
-        sheet.hidden(3, true);                             // D: C and D as one <col>
+        sheet.hidden_column("C", true);
+        sheet.hidden_column(3, true);                             // D: C and D as one <col>
         sheet.width("F", 30);
-        sheet.hidden("F", true);                           // keeps its width
-        sheet.hidden("H", true);
-        sheet.hidden("H", false);
-        CHECK(sheet.hidden("c") && sheet.hidden(2) && !sheet.hidden("H") && !sheet.hidden("A"));
-        CHECK(sheet.hidden() == (std::set<std::size_t>{2, 3, 5}));
-        CHECK_THROWS_AS(sheet.hidden(sc::office::excel::max_columns, true), std::out_of_range);
+        sheet.hidden_column("F", true);                           // keeps its width
+        sheet.hidden_column("H", true);
+        sheet.hidden_column("H", false);
+        CHECK(sheet.hidden_column("c") && sheet.hidden_column(2) && !sheet.hidden_column("H") && !sheet.hidden_column("A"));
+        CHECK(sheet.hidden_columns() == (std::set<std::size_t>{2, 3, 5}));
+        CHECK_THROWS_AS(sheet.hidden_column(sc::office::excel::max_columns, true), std::out_of_range);
+        sheet["A2"] = "Hidden row";
+        sheet.hidden_row(1, true);                         // with cells
+        sheet.hidden_row(4, true);                         // without
+        sheet.height(4, 30);                               // and a height
+        sheet.hidden_row(6, true);
+        sheet.hidden_row(6, false);
+        CHECK(sheet.hidden_row(1) && sheet.hidden_row(4) && !sheet.hidden_row(6) && !sheet.hidden_row(0));
+        CHECK(sheet.hidden_rows() == (std::set<std::size_t>{1, 4}));
+        CHECK_THROWS_AS(sheet.hidden_row(sc::office::excel::max_rows, true), std::out_of_range);
         CHECK(!sheet.frozen());
         sheet.freeze("B2");
         CHECK(sheet.frozen() == address{"B2"});
@@ -518,12 +528,16 @@ int main() {
         const auto xml = archive.read("xl/worksheets/sheet1.xml");
         CHECK(xml.find(R"(<pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/>)") != std::string::npos);
         CHECK(xml.find(R"(<col min="3" max="4" width="9.140625" hidden="1"/>)") != std::string::npos);
+        CHECK(xml.find(R"(<row r="2" hidden="1"><c r="A2")") != std::string::npos);
+        CHECK(xml.find(R"(<row r="5" ht="30" customHeight="1" hidden="1"/>)") != std::string::npos);
         CHECK(xml.find(R"(<col min="6" max="6" width="30" customWidth="1" hidden="1"/>)") != std::string::npos);
         CHECK(archive.read("xl/worksheets/sheet2.xml").find(R"(<pane xSplit="2" topLeftCell="C1" activePane="topRight" state="frozen"/>)") != std::string::npos);
         CHECK(archive.read("xl/worksheets/sheet3.xml").find(R"(activePane="bottomRight")") != std::string::npos);
         CHECK(archive.read("xl/worksheets/sheet4.xml").find("sheetViews") == std::string::npos);
         const auto back = sc::office::excel::read_from(bytes);
-        CHECK(back["Frozen"].hidden() == sheet.hidden());
+        CHECK(back["Frozen"].hidden_columns() == sheet.hidden_columns());
+        CHECK(back["Frozen"].hidden_rows() == sheet.hidden_rows());
+        CHECK(back["Frozen"].height(4) && back["Frozen"].height(4)->points() == 30);
         CHECK(back["Frozen"].width("F") == 30.0);
         CHECK(!back["Frozen"].width("C"));
         CHECK(back["Frozen"].frozen() == address{"A3"});
@@ -595,6 +609,7 @@ int main() {
             CHECK(look.borders.bottom.line == sc::office::excel::line::thin);
         }
         CHECK(sheet.at("G1").style.font.underline == sc::office::excel::underline::single); // <u/>: single
+        CHECK(sheet.at("G1").style.font.strike && !sheet.at("F1").style.font.strike);
         CHECK(sheet.at("E1").style.empty());          // a style that isn't there
         CHECK_EQ(sheet.widths().size(), std::size_t{4}); // A, and B to D; not the styled rest
         CHECK(sheet.width("A") == 20.7109375);
@@ -604,11 +619,12 @@ int main() {
         CHECK(sheet.height(0) && sheet.height(0)->points() == 30.75);
         CHECK(!sheet.height(1));
         CHECK(sheet.height(2) && sheet.height(2)->points() == 0);
+        CHECK(sheet.hidden_row(2) && !sheet.hidden_row(1) && sheet.hidden_rows().size() == 1);
         CHECK_EQ(sheet.heights().size(), std::size_t{2});
         CHECK_EQ(sheet.merged().size(), std::size_t{2});
         CHECK(sheet.merged().size() == 2 && sheet.merged()[0].name() == "A1:C1" && sheet.merged()[1].name() == "E5:F6");
         // Hidden G and H (their width not set by hand), panes frozen at C2 (scrolled to D40).
-        CHECK(sheet.hidden("G") && sheet.hidden("H") && !sheet.hidden("F"));
+        CHECK(sheet.hidden_column("G") && sheet.hidden_column("H") && !sheet.hidden_column("F"));
         CHECK(!sheet.width("G"));
         CHECK(sheet.frozen() == address{"C2"});
     }

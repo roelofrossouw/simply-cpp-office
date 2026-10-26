@@ -53,7 +53,8 @@ prices["A1"].style.alignment = {.horizontal = sc::office::excel::horizontal::cen
 prices.width("A", 20);                   // in characters, as Excel shows it
 prices.height(0, 24);                    // row 1, in points
 prices.merge("A5:B5");                   // shown as one cell, A5
-prices.hidden("C", true);                // a hidden column
+prices.hidden_column("C", true);         // a hidden column
+prices.hidden_row(9, true);              // a hidden row (row 10)
 prices.freeze("A2");                     // row 1 stays in view as the rest scrolls
 sc::office::excel::write(out, "out.xlsx");
 ```
@@ -66,7 +67,7 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
   numbers, days since 1899-12-30 as Excel keeps them; an error such as `#DIV/0!` reads as its
   text. `cell = value` sets the value; `name()` gives `"B3"`. Its `style` (`excel::style`) is how
   it looks: `font.size` (an `sc::distance`, so a plain number is points), `font.color` and
-  `background` (`sc::color`, a solid fill; alpha is left out), `font.bold`, `font.italic`,
+  `background` (`sc::color`, a solid fill; alpha is left out), `font.bold`, `font.italic`, `font.strike`,
   `font.underline` (`excel::underline`: `single`, `doubled`, `single_accounting`,
   `double_accounting`), and `borders`: `left`, `right`, `top` and `bottom`, each an `excel::edge`
   of a `line` (`excel::line`: `thin`, `medium`, `thick`, `doubled`, `dashed`, `dotted`, `hair` and
@@ -94,8 +95,10 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
   and `heights()` lists them; a row with a height and no cells is kept. `merge(range)` merges a
   block of cells into one, shown as its top left (throwing for one cell or an overlap with a merge
   already there), `unmerge(range)` undoes exactly that merge, `merged()` lists them.
-  `hidden(column, true)` hides a column (by number or letters; `false` shows it again, keeping its
-  width), `hidden(column)` says whether it is, `hidden()` lists them. `freeze(address)` freezes the
+  `hidden_column(column, true)` hides a column (by number or letters; `false` shows it again,
+  keeping its width), `hidden_column(column)` says whether it is, `hidden_columns()` lists them;
+  `hidden_row(row, true)`, `hidden_row(row)` and `hidden_rows()` do the same for rows (a hidden row
+  with no cells is kept). `freeze(address)` freezes the
   rows above that cell and the columns left of it, as Excel's Freeze Panes does there
   (`freeze("B2")` keeps row 1 and column A in view; `freeze("A1")` freezes nothing);
   `unfreeze()`, and `frozen()` gives the cell, or none.
@@ -116,15 +119,15 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
   too: 14, the reader's own short date, reads as `"mm-dd-yy"`); a cell with a style and no value
   is kept. Column widths
   are those set by hand (`customWidth`), and row heights likewise (`customHeight`); merged
-  cells too, one overlapping an earlier one left out; hidden columns, and frozen panes (by how
+  cells too, one overlapping an earlier one left out; hidden columns and rows, and frozen panes (by how
   many rows and columns they keep, whatever the file was scrolled to). A file that isn't an `.xlsx` throws `std::runtime_error`.
 - **Writing** (`write(book, file)`, or `bytes(book)` for the file's bytes): each cell's value,
   formula and style, text inline, and the columns' widths; Excel calculates the formulas when it
   opens the file. It throws `std::invalid_argument` for a workbook without sheets, a number that
   isn't finite or a font size outside 1 to 409 points, and then leaves no file behind.
 
-Not covered yet: fonts other than Calibri, strikethrough, diagonal borders, text rotation, hidden
-rows, split (unfrozen) panes, pictures and charts.
+Not covered yet: fonts other than Calibri, diagonal borders, text rotation, split (unfrozen)
+panes, pictures and charts.
 
 **TODO:** pictures in `.xlsx` and `.pptx`. The old binary `.doc` and `.xls` formats aren't
 planned.
@@ -150,7 +153,8 @@ std::cout << pictures.size() << " pictures\n";
 `sc-office-excel-demo FILE` prints an `.xlsx`'s cells, sheet by sheet, with
 their values and formulas; `sc-office-excel-demo --write FILE` writes a small
 workbook, with a styled, centred, taller header kept in view, widened columns, a hidden cost
-column, prices to two decimals, a ruled total and an italic note merged across two columns.
+column, prices to two decimals, a ruled total, an italic note merged across two columns, a
+discontinued item struck through and a hidden row.
 
 <!-- sc-example: examples/sc-office-excel-demo.cpp -->
 ```cpp

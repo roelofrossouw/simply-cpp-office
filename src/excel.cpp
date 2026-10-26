@@ -305,6 +305,7 @@ namespace sc::office::excel {
                     if (const auto color = each.child("color")) made.color = color_of(*color, theme);
                     made.bold = on(each.child("b"));
                     made.italic = on(each.child("i"));
+                    made.strike = on(each.child("strike"));
                     if (const auto underline = each.child("u")) {
                         const auto kind = (*underline)["val"];
                         made.underline = kind.empty() ? underline::single : named_or(underline_named, kind, underline::single);
@@ -420,7 +421,7 @@ namespace sc::office::excel {
                     const auto last = std::min(static_cast<std::size_t>(number(col["max"])), max_columns);
                     for (auto column = std::max<std::size_t>(first, 1); column <= last; ++column) {
                         if (sized) out.width(column - 1, width);
-                        if (hidden) out.hidden(column - 1, true);
+                        if (hidden) out.hidden_column(column - 1, true);
                     }
                 }
             }
@@ -452,6 +453,7 @@ namespace sc::office::excel {
                 next_row = row_index + 1;
                 if (const auto custom = row["customHeight"]; (custom == "1" || custom == "true") && !row["ht"].empty() && row_index < max_rows)
                     out.height(row_index, std::clamp(number(row["ht"]), 0.0, 409.0));
+                if ((row["hidden"] == "1" || row["hidden"] == "true") && row_index < max_rows) out.hidden_row(row_index, true);
                 std::size_t next_column = 0;
                 for (const auto &c: row.children("c")) {
                     address where{row_index, next_column};
@@ -588,6 +590,7 @@ namespace sc::office::excel {
                     xml += "<font>";
                     if (each.bold) xml += "<b/>";
                     if (each.italic) xml += "<i/>";
+                    if (each.strike) xml += "<strike/>";
                     if (each.underline == underline::single) xml += "<u/>";
                     else if (each.underline != underline::none) xml += R"(<u val=")" + std::string{name(each.underline)} + R"("/>)";
                     xml += R"(<sz val=")" + number_text(each.size ? each.size->points() : 11) + R"("/>)";
@@ -676,7 +679,7 @@ namespace sc::office::excel {
             // The columns given a width or hidden; neighbours alike as one <col>.
             std::map<std::size_t, std::pair<std::optional<double>, bool>> columns;
             for (const auto &[column, width]: each.widths()) columns[column].first = width;
-            for (const auto column: each.hidden()) columns[column].second = true;
+            for (const auto column: each.hidden_columns()) columns[column].second = true;
             if (!columns.empty()) {
                 xml += "<cols>";
                 for (auto at = columns.begin(); at != columns.end();) {
@@ -691,7 +694,7 @@ namespace sc::office::excel {
                 xml += "</cols>";
             }
             xml += "<sheetData>";
-            // The rows with cells and those with a height, in order.
+            // The rows with cells, a height or hidden, in order.
             std::map<std::size_t, std::string> rows;
             for (const auto &row: each) {
                 std::string cells;
@@ -700,9 +703,11 @@ namespace sc::office::excel {
                 if (!cells.empty()) rows[row.index()] = std::move(cells);
             }
             for (const auto &[index, height]: each.heights()) rows.try_emplace(index);
+            for (const auto index: each.hidden_rows()) rows.try_emplace(index);
             for (const auto &[index, cells]: rows) {
                 xml += R"(<row r=")" + std::to_string(index + 1) + '"';
                 if (const auto height = each.height(index)) xml += R"( ht=")" + number_text(height->points()) + R"(" customHeight="1")";
+                if (each.hidden_row(index)) xml += R"( hidden="1")";
                 xml += cells.empty() ? "/>" : ">" + cells + "</row>";
             }
             xml += "</sheetData>";

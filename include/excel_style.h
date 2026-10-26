@@ -7,7 +7,8 @@
 #include <string>
 #include <string_view>
 
-// Excel (sc-office): how a cell looks: its font's size, colour, weight, slant and underline, its
+// Excel (sc-office): how a cell looks: its font's size, colour, weight, slant, strikethrough and
+// underline, its
 // background, its borders, its alignment and its number format.
 namespace sc::office::excel {
     // A font's underline, as Excel has them: the accounting ones run the cell's width.
@@ -47,6 +48,7 @@ namespace sc::office::excel {
         std::optional<sc::color> color;
         bool bold = false;
         bool italic = false;
+        bool strike = false; // struck through
         excel::underline underline = underline::none;
 
         bool operator==(const font &) const = default;

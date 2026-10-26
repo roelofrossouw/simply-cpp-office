@@ -15,8 +15,8 @@
 #include <vector>
 #include <utility>
 
-// Excel (sc-office): a sheet, holding the rows that have cells, its columns' widths and which are
-// hidden, its rows' heights, its merged cells and its frozen panes.
+// Excel (sc-office): a sheet, holding the rows that have cells, its columns' widths, its rows'
+// heights, which columns and rows are hidden, its merged cells and its frozen panes.
 namespace sc::office::excel {
     // A sheet: the rows that have cells, in order.
     class sheet {
@@ -48,14 +48,22 @@ namespace sc::office::excel {
         // The columns given a width, by number.
         [[nodiscard]] const std::map<std::size_t, double> &widths() const { return widths_; }
 
-        // Whether a column is hidden. By number from 0, or letters: hidden("B").
-        [[nodiscard]] bool hidden(const std::size_t column) const { return hidden_.contains(column); }
-        [[nodiscard]] bool hidden(const std::string_view column) const { return hidden(column_index(column)); }
+        // Whether a column is hidden. By number from 0, or letters: hidden_column("B").
+        [[nodiscard]] bool hidden_column(const std::size_t column) const { return hidden_columns_.contains(column); }
+        [[nodiscard]] bool hidden_column(const std::string_view column) const { return hidden_column(column_index(column)); }
         // Hides a column, or shows it again (it keeps its width). Throws std::out_of_range beyond XFD.
-        void hidden(std::size_t column, bool hide);
-        void hidden(const std::string_view column, const bool hide) { hidden(column_index(column), hide); }
+        void hidden_column(std::size_t column, bool hide);
+        void hidden_column(const std::string_view column, const bool hide) { hidden_column(column_index(column), hide); }
         // The hidden columns, by number.
-        [[nodiscard]] const std::set<std::size_t> &hidden() const { return hidden_; }
+        [[nodiscard]] const std::set<std::size_t> &hidden_columns() const { return hidden_columns_; }
+
+        // Whether a row is hidden, by number from 0.
+        [[nodiscard]] bool hidden_row(const std::size_t row) const { return hidden_rows_.contains(row); }
+        // Hides a row, or shows it again (it keeps its height and cells). A hidden row with no cells
+        // is kept. Throws std::out_of_range beyond row 1048576.
+        void hidden_row(std::size_t row, bool hide);
+        // The hidden rows, by number.
+        [[nodiscard]] const std::set<std::size_t> &hidden_rows() const { return hidden_rows_; }
 
         // A row's height, in points (a plain number is points: Excel's unit); none: Excel's default
         // (15 for Calibri 11, more when the text needs it). By number from 0.
@@ -99,7 +107,8 @@ namespace sc::office::excel {
         std::map<std::size_t, double> widths_;
         std::map<std::size_t, sc::distance> heights_;
         std::vector<range> merged_;
-        std::set<std::size_t> hidden_;
+        std::set<std::size_t> hidden_columns_;
+        std::set<std::size_t> hidden_rows_;
         std::optional<address> frozen_;
     };
 }
