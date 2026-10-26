@@ -245,7 +245,6 @@ namespace sc::office::excel {
             return out;
         }
 
-        // What Excel names so, or otherwise when a file has a name Excel doesn't (it's drawn anyway).
         template<typename Kind>
         Kind named_or(Kind (*named)(std::string_view), const std::string_view name, const Kind otherwise) {
             try {
@@ -253,6 +252,31 @@ namespace sc::office::excel {
             } catch (const std::invalid_argument &) {
                 return otherwise;
             }
+        }
+
+        // The number formats Excel has without saying (numFmtId below 164) that read the same
+        // everywhere; 14 is the reader's own short date ("mm-dd-yy" stands for it), so it's only read.
+        constexpr std::pair<unsigned, std::string_view> builtin_formats[] = {
+            {1, "0"}, {2, "0.00"}, {3, "#,##0"}, {4, "#,##0.00"}, {9, "0%"}, {10, "0.00%"}, {11, "0.00E+00"}, {12, "# ?/?"},
+            {13, "# ?\?/??"}, {14, "mm-dd-yy"}, {15, "d-mmm-yy"}, {16, "d-mmm"}, {17, "mmm-yy"}, {18, "h:mm AM/PM"},
+            {19, "h:mm:ss AM/PM"}, {20, "h:mm"}, {21, "h:mm:ss"}, {22, "m/d/yy h:mm"}, {37, "#,##0 ;(#,##0)"},
+            {38, "#,##0 ;[Red](#,##0)"}, {39, "#,##0.00;(#,##0.00)"}, {40, "#,##0.00;[Red](#,##0.00)"}, {45, "mm:ss"},
+            {46, "[h]:mm:ss"}, {47, "mmss.0"}, {48, "##0.0E+0"}, {49, "@"}};
+
+        // What Excel names so, or otherwise when a file has a name it doesn't have (it's drawn anyway).
+        template<typename Kind>
+        Kind named_or(Kind (*named)(std::string_view), const std::string_view name, const Kind otherwise);
+
+        // An xf's <alignment horizontal="center" vertical="top" wrapText="1" indent="2"/>.
+        alignment alignment_of(const web::element &xf) {
+            alignment made;
+            const auto element = xf.child("alignment");
+            if (!element) return made;
+            if (const auto kind = (*element)["horizontal"]; !kind.empty()) made.horizontal = named_or(horizontal_named, kind, horizontal::general);
+            if (const auto kind = (*element)["vertical"]; !kind.empty()) made.vertical = named_or(vertical_named, kind, vertical::bottom);
+            made.wrap = (*element)["wrapText"] == "1" || (*element)["wrapText"] == "true";
+            if (const auto indent = (*element)["indent"]; !indent.empty()) made.indent = static_cast<unsigned>(std::clamp(number(indent), 0.0, 250.0));
+            return made;
         }
 
         // Whether a font's <b/>, <i/> ... is there and on (val="0" or "false" turns it off).
@@ -295,6 +319,10 @@ namespace sc::office::excel {
                     if (each.color == plain.color) each.color.reset();
                 }
             }
+            std::map<unsigned, std::string> formats{builtin_formats, builtin_formats + std::size(builtin_formats)};
+            if (const auto list = root.child("numFmts"))
+                for (const auto &each: list->children("numFmt"))
+                    if (!each["numFmtId"].empty()) formats[static_cast<unsigned>(number(each["numFmtId"]))] = unescaped(each["formatCode"]);
             std::vector<excel::borders> borders;
             if (const auto list = root.child("borders")) {
                 for (const auto &each: list->children("border")) {
@@ -319,6 +347,10 @@ namespace sc::office::excel {
                     style made;
                     if (const auto id = xf["fontId"]; !id.empty())
                         if (const auto at = static_cast<std::size_t>(number(id)); at < fonts.size()) made.font = fonts[at];
+                    if (const auto id = xf["numFmtId"]; !id.empty())
+                        if (const auto found = formats.find(static_cast<unsigned>(number(id))); found != formats.end() && found->second != "General")
+                            made.number_format = found->second;
+                    made.alignment = alignment_of(xf);
                     if (const auto id = xf["borderId"]; !id.empty())
                         if (const auto at = static_cast<std::size_t>(number(id)); at < borders.size()) made.borders = borders[at];
                     if (const auto id = xf["fillId"]; !id.empty())
@@ -492,18 +524,40 @@ namespace sc::office::excel {
             [[nodiscard]] std::string xml() {
                 std::vector<font> fonts{font{}};
                 std::vector<excel::borders> borders{excel::borders{}};
+                std::vector<std::string> formats; // custom ones, from 164
                 std::vector<sc::color> fills;
                 std::string xfs = R"(<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>)";
                 for (const auto &each: styles_) {
                     const auto font_id = position(fonts, each.font);
                     const auto fill_id = each.background ? position(fills, *each.background) + 2 : 0; // after none and gray125
                     const auto border_id = position(borders, each.borders);
-                    xfs += R"(<xf numFmtId="0" fontId=")" + std::to_string(font_id) + R"(" fillId=")" + std::to_string(fill_id) + R"(" borderId=")" +
-                           std::to_string(border_id) + R"(" xfId="0")" + (font_id ? R"( applyFont="1")" : "") + (fill_id ? R"( applyFill="1")" : "") +
-                           (border_id ? R"( applyBorder="1")" : "") + "/>";
+                    const auto format_id = format_number(formats, each.number_format);
+                    std::string aligned;
+                    if (each.alignment != alignment{}) {
+                        const auto &align = each.alignment;
+                        if (align.indent > 250) throw std::invalid_argument("excel: an indent is from 0 to 250");
+                        aligned = "<alignment";
+                        if (align.horizontal != horizontal::general) aligned += R"( horizontal=")" + std::string{name(align.horizontal)} + '"';
+                        if (align.vertical != vertical::bottom) aligned += R"( vertical=")" + std::string{name(align.vertical)} + '"';
+                        if (align.wrap) aligned += R"( wrapText="1")";
+                        if (align.indent) aligned += R"( indent=")" + std::to_string(align.indent) + '"';
+                        aligned += "/>";
+                    }
+                    xfs += R"(<xf numFmtId=")" + std::to_string(format_id) + R"(" fontId=")" + std::to_string(font_id) + R"(" fillId=")" +
+                           std::to_string(fill_id) + R"(" borderId=")" + std::to_string(border_id) + R"(" xfId="0")" +
+                           (format_id ? R"( applyNumberFormat="1")" : "") + (font_id ? R"( applyFont="1")" : "") +
+                           (fill_id ? R"( applyFill="1")" : "") + (border_id ? R"( applyBorder="1")" : "") +
+                           (aligned.empty() ? "/>" : R"( applyAlignment="1">)" + aligned + "</xf>");
                 }
                 std::string xml{xml_declaration};
-                xml += R"(<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count=")" + std::to_string(fonts.size()) + R"(">)";
+                xml += R"(<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">)";
+                if (!formats.empty()) {
+                    xml += R"(<numFmts count=")" + std::to_string(formats.size()) + R"(">)";
+                    for (std::size_t i = 0; i < formats.size(); ++i)
+                        xml += R"(<numFmt numFmtId=")" + std::to_string(164 + i) + R"(" formatCode=")" + xml_text(formats[i]) + R"("/>)";
+                    xml += "</numFmts>";
+                }
+                xml += R"(<fonts count=")" + std::to_string(fonts.size()) + R"(">)";
                 for (const auto &each: fonts) {
                     if (each.size && !(each.size->points() >= 1 && each.size->points() <= 409))
                         throw std::invalid_argument("excel: a font's size is from 1 to 409 points");
@@ -545,6 +599,16 @@ namespace sc::office::excel {
                 if (found != list.end()) return static_cast<std::size_t>(found - list.begin());
                 list.push_back(what);
                 return list.size() - 1;
+            }
+
+            // A format code's numFmtId: 0 for General, Excel's own number for one it has without saying,
+            // else the next from 164 (formats holds those).
+            static std::size_t format_number(std::vector<std::string> &formats, const std::string &code) {
+                if (code.empty() || code == "General") return 0;
+                if (code.size() > 255) throw std::invalid_argument("excel: a number format is at most 255 characters");
+                for (const auto &[id, builtin]: builtin_formats)
+                    if (id != 14 && builtin == code) return id;
+                return 164 + position(formats, code);
             }
 
             // "FFC00000": opaque, as Excel writes colours.

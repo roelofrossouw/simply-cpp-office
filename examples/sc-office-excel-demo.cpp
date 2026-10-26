@@ -1,6 +1,7 @@
 // Prints the cells of an Excel workbook, sheet by sheet, with their values and formulas, or writes
 // a small one with --write: a header in bold white on blue, widened columns, a total in bold between
-// a thin line and a double one, as accountants rule them, and an italic, underlined note.
+// a thin line and a double one, as accountants rule them, prices to two decimals, and an italic,
+// underlined note.
 //
 //     sc-office-excel-demo prices.xlsx
 //     sc-office-excel-demo --write sample.xlsx
@@ -28,7 +29,8 @@ namespace {
         using namespace sc::office::excel;
         workbook book;
         auto &prices = book["Prices"];
-        const style header{.font = {.size = 12, .color = sc::color::White, .bold = true}, .background = sc::color{"#4472c4"}};
+        const style header{.font = {.size = 12, .color = sc::color::White, .bold = true}, .background = sc::color{"#4472c4"},
+                           .alignment = {.horizontal = horizontal::center}};
         prices["A1"] = "Item";
         prices["B1"] = "Price";
         prices["A1"].style = prices["B1"].style = header;
@@ -47,6 +49,7 @@ namespace {
         prices["A6"] = "Prices include VAT";
         prices["A6"].style.font.italic = true;
         prices["A6"].style.font.underline = underline::single;
+        for (const auto *cell: {"B2", "B3", "B4"}) prices[cell].style.number_format = "#,##0.00";
         prices.width("A", 20);
         prices.width("B", 12);
         write(book, file);

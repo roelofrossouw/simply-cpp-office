@@ -79,6 +79,7 @@ namespace {
 </a:clrScheme></a:themeElements></a:theme>)";
     const std::string styles = R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;R&quot;\ #,##0.00"/></numFmts>
   <fonts count="4">
     <font><sz val="11"/><color theme="1"/><name val="Calibri"/></font>
     <font><b/><sz val="16"/><color theme="0"/><name val="Calibri"/></font>
@@ -104,6 +105,8 @@ namespace {
     <xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>
     <xf numFmtId="0" fontId="5" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+    <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="centerContinuous" vertical="center" wrapText="1" indent="2"/></xf>
+    <xf numFmtId="10" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="sideways"/></xf>
   </cellXfs>
 </styleSheet>)";
     const std::string styled_sheet = R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -114,7 +117,7 @@ namespace {
     <col min="5" max="16384" width="9.140625" style="1"/>
   </cols>
   <sheetData>
-    <row r="1"><c r="A1" s="1" t="inlineStr"><is><t>Header</t></is></c><c r="B1" s="2"><v>1</v></c><c r="C1" s="3"/><c r="D1" s="4"/><c r="E1" s="9"><v>2</v></c><c r="F1" s="5"/><c r="G1" s="6"><v>3</v></c></row>
+    <row r="1"><c r="A1" s="1" t="inlineStr"><is><t>Header</t></is></c><c r="B1" s="2"><v>1</v></c><c r="C1" s="3"/><c r="D1" s="4"/><c r="E1" s="9"><v>2</v></c><c r="F1" s="5"/><c r="G1" s="6"><v>3</v></c><c r="H1" s="7"><v>1234.5</v></c><c r="I1" s="8"><v>0.25</v></c></row>
   </sheetData>
 </worksheet>)";
 
@@ -348,6 +351,16 @@ int main() {
         sheet["D2"].style.borders = sc::office::excel::borders::all({line::thin});
         sheet["D2"].style.borders.bottom = {line::doubled, sc::color{"#1f4e79"}};
         sheet["E2"].style.borders = sheet["D2"].style.borders; // the same borders: written once
+        using sc::office::excel::horizontal;
+        using sc::office::excel::vertical;
+        sheet["A3"] = 1234.5;
+        sheet["A3"].style.number_format = "#,##0.00";           // Excel's own 4
+        sheet["B3"] = 0.5;
+        sheet["B3"].style.number_format = "0.0%";               // a format of our own: 164
+        sheet["C3"] = 46000.0;
+        sheet["C3"].style.number_format = "yyyy-mm-dd";         // 165
+        sheet["D3"] = "Wrapped and centred";
+        sheet["D3"].style.alignment = {.horizontal = horizontal::center, .vertical = vertical::top, .wrap = true, .indent = 1};
         sheet.width("A", 30);
         sheet.width(1, 12.5);
         sheet.width("C", 12.5);                         // B and C: one <col>
@@ -366,7 +379,10 @@ int main() {
         const auto bytes = sc::office::excel::bytes(book);
         const auto archive = sc::archive::from_memory(bytes);
         const auto styles_xml = archive.read("xl/styles.xml");
-        CHECK(styles_xml.find(R"(<cellXfs count="6">)") != std::string::npos); // plain, A1 and A2, B1, C1, D2, E2
+        CHECK(styles_xml.find(R"(<cellXfs count="10">)") != std::string::npos); // plain, A1 and A2, B1, C1, D2, E2, A3, B3, C3, D3
+        CHECK(styles_xml.find(R"(<numFmts count="2"><numFmt numFmtId="164" formatCode="0.0%"/><numFmt numFmtId="165" formatCode="yyyy-mm-dd"/></numFmts>)") != std::string::npos);
+        CHECK(styles_xml.find(R"(<xf numFmtId="4" )") != std::string::npos);
+        CHECK(styles_xml.find(R"(<alignment horizontal="center" vertical="top" wrapText="1" indent="1"/>)") != std::string::npos);
         CHECK(styles_xml.find(R"(<borders count="2">)") != std::string::npos);
         CHECK(styles_xml.find(R"(<i/><u val="doubleAccounting"/>)") != std::string::npos);
         const auto xml = archive.read("xl/worksheets/sheet1.xml");
@@ -391,6 +407,13 @@ int main() {
         CHECK(fancy.borders.top.line == line::thin && fancy.borders.right.line == line::thin);
         CHECK(fancy.borders.bottom.line == line::doubled && fancy.borders.bottom.color && fancy.borders.bottom.color->to_hex() == "#1f4e79");
         CHECK(got.contains("E2") && got.at("E2").style.borders.left.line == line::thin);
+        CHECK_EQ(got.at("A3").style.number_format, std::string{"#,##0.00"});
+        CHECK_EQ(got.at("B3").style.number_format, std::string{"0.0%"});
+        CHECK_EQ(got.at("C3").style.number_format, std::string{"yyyy-mm-dd"});
+        CHECK(got.at("D3").style.alignment == sheet.at("D3").style.alignment);
+        CHECK(sc::office::excel::name(horizontal::center_across) == "centerContinuous");
+        CHECK(sc::office::excel::vertical_named("center") == vertical::center);
+        CHECK_THROWS_AS((void) sc::office::excel::horizontal_named("middle"), std::invalid_argument);
 
         CHECK(sc::office::excel::name(line::medium_dash_dot_dot) == "mediumDashDotDot");
         CHECK(sc::office::excel::line_named("double") == line::doubled);
@@ -399,6 +422,12 @@ int main() {
         CHECK_THROWS_AS((void) sc::office::excel::underline_named("wavy"), std::invalid_argument);
 
         sheet["D1"].style.font.size = 500;
+        CHECK_THROWS_AS((void) sc::office::excel::bytes(book), std::invalid_argument);
+        sheet["D1"].style.font.size.reset();
+        sheet["D1"].style.alignment.indent = 251;
+        CHECK_THROWS_AS((void) sc::office::excel::bytes(book), std::invalid_argument);
+        sheet["D1"].style.alignment.indent = 0;
+        sheet["D1"].style.number_format = std::string(256, '0');
         CHECK_THROWS_AS((void) sc::office::excel::bytes(book), std::invalid_argument);
     }
 
@@ -438,7 +467,19 @@ int main() {
                 CHECK(std::abs(tinted.background->blue() * 255 - 0xF3) < 1.5);
             }
         }
-        CHECK(!sheet.contains("D1"));                 // a date format only: nothing we keep
+        CHECK(sheet.contains("D1") && sheet.at("D1").style.number_format == "mm-dd-yy"); // 14, the reader's short date
+        // A format of the file's own, and alignment.
+        CHECK(sheet.contains("H1"));
+        if (sheet.contains("H1")) {
+            const auto &look = sheet.at("H1").style;
+            CHECK_EQ(look.number_format, std::string{R"("R"\ #,##0.00)"});
+            CHECK(look.alignment.horizontal == sc::office::excel::horizontal::center_across);
+            CHECK(look.alignment.vertical == sc::office::excel::vertical::center);
+            CHECK(look.alignment.wrap);
+            CHECK_EQ(look.alignment.indent, 2u);
+        }
+        CHECK(sheet.contains("I1") && sheet.at("I1").style.number_format == "0.00%"); // Excel's own 10
+        CHECK(sheet.contains("I1") && sheet.at("I1").style.alignment.horizontal == sc::office::excel::horizontal::general); // a name Excel lacks
         // Italic, double underline; borders by start and end (left and right), theme colours, a
         // line Excel doesn't have drawn thin, indexed 64 (automatic) as no colour.
         CHECK(sheet.contains("F1"));
