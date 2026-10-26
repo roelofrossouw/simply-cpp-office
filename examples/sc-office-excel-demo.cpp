@@ -1,7 +1,8 @@
 // Prints the cells of an Excel workbook, sheet by sheet, with their values and formulas, or writes
 // a small one with --write: a header in bold white on blue, widened columns, a total in bold between
 // a thin line and a double one, as accountants rule them, prices to two decimals, a taller header
-// row, and an italic, underlined note merged across both columns.
+// row kept in view as the rest scrolls, a hidden cost column, and an italic, underlined note merged
+// across both columns.
 //
 //     sc-office-excel-demo prices.xlsx
 //     sc-office-excel-demo --write sample.xlsx
@@ -51,6 +52,11 @@ namespace {
         prices["A6"].style.font.underline = underline::single;
         prices.merge("A6:B6");
         prices.height(0, 24); // points
+        prices.freeze("A2");  // row 1 stays in view
+        prices["C1"] = "Cost";
+        prices["C2"] = 12.0;
+        prices["C3"] = 15.5;
+        prices.hidden("C", true);
         for (const auto *cell: {"B2", "B3", "B4"}) prices[cell].style.number_format = "#,##0.00";
         prices.width("A", 20);
         prices.width("B", 12);

@@ -14,8 +14,8 @@
 // Excel workbooks (.xlsx): sheets of cells, each with its value and formula, read and written. A
 // workbook is a ZIP archive of XML (Office Open XML), read and written with sc-archive and sc-web.
 // Cells have a style (font size, colour, bold, italic and underline; a background; borders;
-// alignment; a number format), columns a width, rows a height, and cells can be merged; no
-// pictures. Workbooks, sheets and rows work
+// alignment; a number format), columns a width (or are hidden), rows a height, cells can be merged
+// and panes frozen; no pictures. Workbooks, sheets and rows work
 // like the standard containers: a sheet holds the rows that have cells, a row the cells that are
 // set.
 //

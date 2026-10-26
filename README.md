@@ -53,6 +53,8 @@ prices["A1"].style.alignment = {.horizontal = sc::office::excel::horizontal::cen
 prices.width("A", 20);                   // in characters, as Excel shows it
 prices.height(0, 24);                    // row 1, in points
 prices.merge("A5:B5");                   // shown as one cell, A5
+prices.hidden("C", true);                // a hidden column
+prices.freeze("A2");                     // row 1 stays in view as the rest scrolls
 sc::office::excel::write(out, "out.xlsx");
 ```
 
@@ -92,6 +94,11 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
   and `heights()` lists them; a row with a height and no cells is kept. `merge(range)` merges a
   block of cells into one, shown as its top left (throwing for one cell or an overlap with a merge
   already there), `unmerge(range)` undoes exactly that merge, `merged()` lists them.
+  `hidden(column, true)` hides a column (by number or letters; `false` shows it again, keeping its
+  width), `hidden(column)` says whether it is, `hidden()` lists them. `freeze(address)` freezes the
+  rows above that cell and the columns left of it, as Excel's Freeze Panes does there
+  (`freeze("B2")` keeps row 1 and column A in view; `freeze("A1")` freezes nothing);
+  `unfreeze()`, and `frozen()` gives the cell, or none.
 - **Ranges** (`excel::range`): `"A1:D3"`, or two opposite corners (`{"D3", "A1"}` is A1:D3);
   `first` and `last` (top left, bottom right), `name()`, `contains(address)`, `overlaps(range)`,
   `size()`.
@@ -109,14 +116,15 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
   too: 14, the reader's own short date, reads as `"mm-dd-yy"`); a cell with a style and no value
   is kept. Column widths
   are those set by hand (`customWidth`), and row heights likewise (`customHeight`); merged
-  cells too, one overlapping an earlier one left out. A file that isn't an `.xlsx` throws `std::runtime_error`.
+  cells too, one overlapping an earlier one left out; hidden columns, and frozen panes (by how
+  many rows and columns they keep, whatever the file was scrolled to). A file that isn't an `.xlsx` throws `std::runtime_error`.
 - **Writing** (`write(book, file)`, or `bytes(book)` for the file's bytes): each cell's value,
   formula and style, text inline, and the columns' widths; Excel calculates the formulas when it
   opens the file. It throws `std::invalid_argument` for a workbook without sheets, a number that
   isn't finite or a font size outside 1 to 409 points, and then leaves no file behind.
 
 Not covered yet: fonts other than Calibri, strikethrough, diagonal borders, text rotation, hidden
-columns, frozen panes, pictures and charts.
+rows, split (unfrozen) panes, pictures and charts.
 
 **TODO:** pictures in `.xlsx` and `.pptx`. The old binary `.doc` and `.xls` formats aren't
 planned.
@@ -141,8 +149,8 @@ std::cout << pictures.size() << " pictures\n";
 
 `sc-office-excel-demo FILE` prints an `.xlsx`'s cells, sheet by sheet, with
 their values and formulas; `sc-office-excel-demo --write FILE` writes a small
-workbook, with a styled, centred, taller header, widened columns, prices to two decimals, a ruled
-total and an italic note merged across two columns.
+workbook, with a styled, centred, taller header kept in view, widened columns, a hidden cost
+column, prices to two decimals, a ruled total and an italic note merged across two columns.
 
 <!-- sc-example: examples/sc-office-excel-demo.cpp -->
 ```cpp

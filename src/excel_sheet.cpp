@@ -72,4 +72,16 @@ namespace sc::office::excel {
     }
 
     std::size_t sheet::unmerge(const range &cells) { return std::erase(merged_, cells); }
+
+    void sheet::hidden(const std::size_t column, const bool hide) {
+        if (column >= max_columns) throw std::out_of_range("excel: a column beyond XFD");
+        if (hide) hidden_.insert(column);
+        else hidden_.erase(column);
+    }
+
+    void sheet::freeze(const address top_left) {
+        if (top_left.row >= max_rows || top_left.column >= max_columns) throw std::out_of_range("excel: a cell beyond XFD1048576");
+        if (top_left == address{0, 0}) frozen_.reset();
+        else frozen_ = top_left;
+    }
 }

@@ -412,14 +412,27 @@ namespace sc::office::excel {
             // Columns given a width; others (styled only) keep Excel's default.
             if (const auto columns = document.root().child("cols")) {
                 for (const auto &col: columns->children("col")) {
-                    const auto custom = col["customWidth"];
-                    if (col["width"].empty() || (custom != "1" && custom != "true")) continue;
-                    const auto width = std::clamp(number(col["width"]), 0.0, 255.0);
+                    const auto yes = [&](const std::string_view name) { return col[name] == "1" || col[name] == "true"; };
+                    const bool sized = !col["width"].empty() && yes("customWidth"), hidden = yes("hidden");
+                    if ((!sized && !hidden) || col["min"].empty() || col["max"].empty()) continue;
+                    const auto width = sized ? std::clamp(number(col["width"]), 0.0, 255.0) : 0.0;
                     const auto first = static_cast<std::size_t>(number(col["min"]));
                     const auto last = std::min(static_cast<std::size_t>(number(col["max"])), max_columns);
-                    for (auto column = std::max<std::size_t>(first, 1); column <= last; ++column) out.width(column - 1, width);
+                    for (auto column = std::max<std::size_t>(first, 1); column <= last; ++column) {
+                        if (sized) out.width(column - 1, width);
+                        if (hidden) out.hidden(column - 1, true);
+                    }
                 }
             }
+            // Frozen panes: so many rows (ySplit) and columns (xSplit) kept in view.
+            if (const auto views = document.root().child("sheetViews"))
+                if (const auto view = views->child("sheetView"))
+                    if (const auto pane = view->child("pane"); pane && ((*pane)["state"] == "frozen" || (*pane)["state"] == "frozenSplit")) {
+                        const auto split = [&](const std::string_view name) {
+                            return (*pane)[name].empty() ? std::size_t{0} : static_cast<std::size_t>(std::max(number((*pane)[name]), 0.0));
+                        };
+                        if (split("ySplit") < max_rows && split("xSplit") < max_columns) out.freeze({split("ySplit"), split("xSplit")});
+                    }
             // Merged cells; one that isn't a range, or overlaps one before it, is left out.
             if (const auto merges = document.root().child("mergeCells")) {
                 for (const auto &each: merges->children("mergeCell")) {
@@ -651,13 +664,28 @@ namespace sc::office::excel {
         std::string sheet_xml(const sheet &each, style_table &styles) {
             std::string xml{xml_declaration};
             xml += R"(<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">)";
-            if (const auto &widths = each.widths(); !widths.empty()) { // neighbours of one width as one <col>
+            if (const auto &frozen = each.frozen()) { // the rows above and columns left of it kept in view
+                const auto rows = frozen->row, columns = frozen->column;
+                const auto pane = rows && columns ? "bottomRight" : rows ? "bottomLeft" : "topRight";
+                xml += R"(<sheetViews><sheetView workbookViewId="0"><pane)";
+                if (columns) xml += R"( xSplit=")" + std::to_string(columns) + '"';
+                if (rows) xml += R"( ySplit=")" + std::to_string(rows) + '"';
+                xml += R"( topLeftCell=")" + frozen->name() + R"(" activePane=")" + pane + R"(" state="frozen"/><selection pane=")" + pane +
+                       R"("/></sheetView></sheetViews>)";
+            }
+            // The columns given a width or hidden; neighbours alike as one <col>.
+            std::map<std::size_t, std::pair<std::optional<double>, bool>> columns;
+            for (const auto &[column, width]: each.widths()) columns[column].first = width;
+            for (const auto column: each.hidden()) columns[column].second = true;
+            if (!columns.empty()) {
                 xml += "<cols>";
-                for (auto at = widths.begin(); at != widths.end();) {
+                for (auto at = columns.begin(); at != columns.end();) {
                     auto last = at;
-                    while (std::next(last) != widths.end() && std::next(last)->first == last->first + 1 && std::next(last)->second == at->second) ++last;
+                    while (std::next(last) != columns.end() && std::next(last)->first == last->first + 1 && std::next(last)->second == at->second) ++last;
+                    const auto &[width, hidden] = at->second;
+                    // A hidden column without a width of its own gets Excel's default, for when it's shown.
                     xml += R"(<col min=")" + std::to_string(at->first + 1) + R"(" max=")" + std::to_string(last->first + 1) + R"(" width=")" +
-                           number_text(at->second) + R"(" customWidth="1"/>)";
+                           (width ? number_text(*width) + R"(" customWidth="1")" : std::string{R"(9.140625")"}) + (hidden ? R"( hidden="1")" : "") + "/>";
                     at = std::next(last);
                 }
                 xml += "</cols>";

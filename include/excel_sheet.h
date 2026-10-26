@@ -9,13 +9,14 @@
 #include <cstddef>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
 #include <utility>
 
-// Excel (sc-office): a sheet, holding the rows that have cells, its columns' widths, its rows'
-// heights and its merged cells.
+// Excel (sc-office): a sheet, holding the rows that have cells, its columns' widths and which are
+// hidden, its rows' heights, its merged cells and its frozen panes.
 namespace sc::office::excel {
     // A sheet: the rows that have cells, in order.
     class sheet {
@@ -47,6 +48,15 @@ namespace sc::office::excel {
         // The columns given a width, by number.
         [[nodiscard]] const std::map<std::size_t, double> &widths() const { return widths_; }
 
+        // Whether a column is hidden. By number from 0, or letters: hidden("B").
+        [[nodiscard]] bool hidden(const std::size_t column) const { return hidden_.contains(column); }
+        [[nodiscard]] bool hidden(const std::string_view column) const { return hidden(column_index(column)); }
+        // Hides a column, or shows it again (it keeps its width). Throws std::out_of_range beyond XFD.
+        void hidden(std::size_t column, bool hide);
+        void hidden(const std::string_view column, const bool hide) { hidden(column_index(column), hide); }
+        // The hidden columns, by number.
+        [[nodiscard]] const std::set<std::size_t> &hidden() const { return hidden_; }
+
         // A row's height, in points (a plain number is points: Excel's unit); none: Excel's default
         // (15 for Calibri 11, more when the text needs it). By number from 0.
         [[nodiscard]] std::optional<sc::distance> height(std::size_t row) const;
@@ -66,6 +76,15 @@ namespace sc::office::excel {
         // The merged ranges, in the order they were merged (or read).
         [[nodiscard]] const std::vector<range> &merged() const { return merged_; }
 
+        // Freezes the rows above the cell and the columns left of it, as Excel's Freeze Panes does
+        // there: freeze("B2") keeps row 1 and column A in view, freeze("A2") row 1 only, freeze("B1")
+        // column A only. freeze("A1") freezes nothing: it unfreezes. Throws std::out_of_range beyond
+        // XFD1048576.
+        void freeze(address top_left);
+        void unfreeze() { frozen_.reset(); }
+        // The cell the panes are frozen at; none when they aren't.
+        [[nodiscard]] const std::optional<address> &frozen() const { return frozen_; }
+
         [[nodiscard]] auto begin() { return detail::values_iterator{rows_.begin()}; }
         [[nodiscard]] auto end() { return detail::values_iterator{rows_.end()}; }
         [[nodiscard]] auto begin() const { return detail::values_iterator{rows_.cbegin()}; }
@@ -80,5 +99,7 @@ namespace sc::office::excel {
         std::map<std::size_t, double> widths_;
         std::map<std::size_t, sc::distance> heights_;
         std::vector<range> merged_;
+        std::set<std::size_t> hidden_;
+        std::optional<address> frozen_;
     };
 }

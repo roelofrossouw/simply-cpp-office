@@ -11,6 +11,7 @@
 #include <iterator>
 #include <limits>
 #include <random>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -111,8 +112,10 @@ namespace {
 </styleSheet>)";
     const std::string styled_sheet = R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetViews><sheetView tabSelected="1" workbookViewId="0"><pane xSplit="2" ySplit="1" topLeftCell="D40" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>
   <cols>
     <col min="1" max="1" width="20.7109375" customWidth="1"/>
+    <col min="7" max="8" width="0" hidden="1"/>
     <col min="2" max="4" width="9.140625" customWidth="1"/>
     <col min="5" max="16384" width="9.140625" style="1"/>
   </cols>
@@ -484,6 +487,51 @@ int main() {
         CHECK(text(got, "A1") == "Title across four columns");
     }
 
+    SECTION("Hidden columns and frozen panes");
+    {
+        sc::office::excel::workbook book;
+        auto &sheet = book["Frozen"];
+        sheet["A1"] = "Name";
+        sheet.hidden("C", true);
+        sheet.hidden(3, true);                             // D: C and D as one <col>
+        sheet.width("F", 30);
+        sheet.hidden("F", true);                           // keeps its width
+        sheet.hidden("H", true);
+        sheet.hidden("H", false);
+        CHECK(sheet.hidden("c") && sheet.hidden(2) && !sheet.hidden("H") && !sheet.hidden("A"));
+        CHECK(sheet.hidden() == (std::set<std::size_t>{2, 3, 5}));
+        CHECK_THROWS_AS(sheet.hidden(sc::office::excel::max_columns, true), std::out_of_range);
+        CHECK(!sheet.frozen());
+        sheet.freeze("B2");
+        CHECK(sheet.frozen() == address{"B2"});
+        sheet.freeze("A1");                                // nothing frozen
+        CHECK(!sheet.frozen());
+        sheet.freeze("A3");                                // the first two rows
+        CHECK_THROWS_AS(sheet.freeze(address{sc::office::excel::max_rows, 0}), std::out_of_range);
+        book["Columns"].freeze("C1");                      // the first two columns
+        book["Both"].freeze("B2");
+        book["Unfrozen"].freeze("B2");
+        book["Unfrozen"].unfreeze();
+
+        const auto bytes = sc::office::excel::bytes(book);
+        const auto archive = sc::archive::from_memory(bytes);
+        const auto xml = archive.read("xl/worksheets/sheet1.xml");
+        CHECK(xml.find(R"(<pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/>)") != std::string::npos);
+        CHECK(xml.find(R"(<col min="3" max="4" width="9.140625" hidden="1"/>)") != std::string::npos);
+        CHECK(xml.find(R"(<col min="6" max="6" width="30" customWidth="1" hidden="1"/>)") != std::string::npos);
+        CHECK(archive.read("xl/worksheets/sheet2.xml").find(R"(<pane xSplit="2" topLeftCell="C1" activePane="topRight" state="frozen"/>)") != std::string::npos);
+        CHECK(archive.read("xl/worksheets/sheet3.xml").find(R"(activePane="bottomRight")") != std::string::npos);
+        CHECK(archive.read("xl/worksheets/sheet4.xml").find("sheetViews") == std::string::npos);
+        const auto back = sc::office::excel::read_from(bytes);
+        CHECK(back["Frozen"].hidden() == sheet.hidden());
+        CHECK(back["Frozen"].width("F") == 30.0);
+        CHECK(!back["Frozen"].width("C"));
+        CHECK(back["Frozen"].frozen() == address{"A3"});
+        CHECK(back["Columns"].frozen() == address{"C1"});
+        CHECK(back["Both"].frozen() == address{"B2"});
+        CHECK(!back["Unfrozen"].frozen());
+    }
+
     SECTION("Styles and column widths the way Excel writes them");
     {
         const auto file = root / "styled.xlsx";
@@ -559,6 +607,10 @@ int main() {
         CHECK_EQ(sheet.heights().size(), std::size_t{2});
         CHECK_EQ(sheet.merged().size(), std::size_t{2});
         CHECK(sheet.merged().size() == 2 && sheet.merged()[0].name() == "A1:C1" && sheet.merged()[1].name() == "E5:F6");
+        // Hidden G and H (their width not set by hand), panes frozen at C2 (scrolled to D40).
+        CHECK(sheet.hidden("G") && sheet.hidden("H") && !sheet.hidden("F"));
+        CHECK(!sheet.width("G"));
+        CHECK(sheet.frozen() == address{"C2"});
     }
 
     SECTION("Not a workbook, and what can't be written");
