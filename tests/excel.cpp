@@ -89,9 +89,10 @@ namespace {
     <font><i/><u val="double"/><sz val="11"/><color theme="1"/><name val="Calibri"/></font>
     <font><strike/><u/><sz val="11"/><color theme="1"/><name val="Calibri"/></font>
   </fonts>
-  <borders count="2">
+  <borders count="3">
     <border><left/><right/><top/><bottom/><diagonal/></border>
     <border><start style="thin"><color indexed="64"/></start><end style="mediumDashDot"/><top style="double"><color theme="4"/></top><bottom style="madeUp"/><diagonal/></border>
+    <border diagonalUp="1" diagonalDown="1"><left/><right/><top/><bottom/><diagonal style="dashed"><color rgb="FFFF0000"/></diagonal></border>
   </borders>
   <fills count="4">
     <fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
@@ -108,6 +109,8 @@ namespace {
     <xf numFmtId="0" fontId="5" fillId="0" borderId="0" xfId="0" applyFont="1"/>
     <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="centerContinuous" vertical="center" wrapText="1" indent="2"/></xf>
     <xf numFmtId="10" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="sideways"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="2" xfId="0" applyBorder="1" applyAlignment="1"><alignment textRotation="135"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment textRotation="255"/></xf>
   </cellXfs>
 </styleSheet>)";
     const std::string styled_sheet = R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -120,7 +123,7 @@ namespace {
     <col min="5" max="16384" width="9.140625" style="1"/>
   </cols>
   <sheetData>
-    <row r="1" ht="30.75" customHeight="1"><c r="A1" s="1" t="inlineStr"><is><t>Header</t></is></c><c r="B1" s="2"><v>1</v></c><c r="C1" s="3"/><c r="D1" s="4"/><c r="E1" s="9"><v>2</v></c><c r="F1" s="5"/><c r="G1" s="6"><v>3</v></c><c r="H1" s="7"><v>1234.5</v></c><c r="I1" s="8"><v>0.25</v></c></row>
+    <row r="1" ht="30.75" customHeight="1"><c r="A1" s="1" t="inlineStr"><is><t>Header</t></is></c><c r="B1" s="2"><v>1</v></c><c r="C1" s="3"/><c r="D1" s="4"/><c r="E1" s="99"><v>2</v></c><c r="F1" s="5"/><c r="G1" s="6"><v>3</v></c><c r="H1" s="7"><v>1234.5</v></c><c r="I1" s="8"><v>0.25</v></c><c r="J1" s="9"><v>1</v></c><c r="K1" s="10"><v>2</v></c></row>
     <row r="2" ht="18" spans="1:3"/>
     <row r="3" ht="0" customHeight="1" hidden="1"/>
   </sheetData>
@@ -368,6 +371,15 @@ int main() {
         sheet["C3"].style.number_format = "yyyy-mm-dd";         // 165
         sheet["D3"] = "Wrapped and centred";
         sheet["D3"].style.alignment = {.horizontal = horizontal::center, .vertical = vertical::top, .wrap = true, .indent = 1};
+        sheet["E3"] = "Up";
+        sheet["E3"].style.alignment.rotation = 45;
+        sheet["E3"].style.borders.diagonal_up = {line::thin, sc::color{"#ff0000"}};
+        sheet["F3"] = "Down";
+        sheet["F3"].style.alignment.rotation = -90;
+        sheet["F3"].style.borders.diagonal_down = {line::medium};
+        sheet["G3"] = "Stacked";
+        sheet["G3"].style.alignment.stacked = true;
+        sheet["G3"].style.borders.diagonal_up = sheet["G3"].style.borders.diagonal_down = {line::thin}; // a cross
         sheet.width("A", 30);
         sheet.width(1, 12.5);
         sheet.width("C", 12.5);                         // B and C: one <col>
@@ -386,11 +398,15 @@ int main() {
         const auto bytes = sc::office::excel::bytes(book);
         const auto archive = sc::archive::from_memory(bytes);
         const auto styles_xml = archive.read("xl/styles.xml");
-        CHECK(styles_xml.find(R"(<cellXfs count="10">)") != std::string::npos); // plain, A1 and A2, B1, C1, D2, E2, A3, B3, C3, D3
+        CHECK(styles_xml.find(R"(<cellXfs count="13">)") != std::string::npos); // plain, A1 and A2, B1, C1, D2, E2, A3, B3, C3, D3, E3, F3, G3
+        CHECK(styles_xml.find(R"(<alignment textRotation="45"/>)") != std::string::npos);
+        CHECK(styles_xml.find(R"(<alignment textRotation="180"/>)") != std::string::npos);
+        CHECK(styles_xml.find(R"(<alignment textRotation="255"/>)") != std::string::npos);
+        CHECK(styles_xml.find(R"(<border diagonalUp="1" diagonalDown="1"><left/><right/><top/><bottom/><diagonal style="thin"></diagonal></border>)") != std::string::npos);
         CHECK(styles_xml.find(R"(<numFmts count="2"><numFmt numFmtId="164" formatCode="0.0%"/><numFmt numFmtId="165" formatCode="yyyy-mm-dd"/></numFmts>)") != std::string::npos);
         CHECK(styles_xml.find(R"(<xf numFmtId="4" )") != std::string::npos);
         CHECK(styles_xml.find(R"(<alignment horizontal="center" vertical="top" wrapText="1" indent="1"/>)") != std::string::npos);
-        CHECK(styles_xml.find(R"(<borders count="2">)") != std::string::npos);
+        CHECK(styles_xml.find(R"(<borders count="5">)") != std::string::npos); // none, D2's, E3's, F3's, G3's
         CHECK(styles_xml.find(R"(<i/><strike/><u val="doubleAccounting"/>)") != std::string::npos);
         const auto xml = archive.read("xl/worksheets/sheet1.xml");
         CHECK(xml.find(R"(<col min="2" max="3" width="12.5" customWidth="1"/>)") != std::string::npos);
@@ -418,6 +434,12 @@ int main() {
         CHECK_EQ(got.at("B3").style.number_format, std::string{"0.0%"});
         CHECK_EQ(got.at("C3").style.number_format, std::string{"yyyy-mm-dd"});
         CHECK(got.at("D3").style.alignment == sheet.at("D3").style.alignment);
+        for (const auto *name: {"E3", "F3", "G3"}) {
+            CHECK_MSG(got.at(name).style.alignment == sheet.at(name).style.alignment, name);
+            CHECK_MSG(got.at(name).style.borders.diagonal_up.line == sheet.at(name).style.borders.diagonal_up.line, name);
+            CHECK_MSG(got.at(name).style.borders.diagonal_down.line == sheet.at(name).style.borders.diagonal_down.line, name);
+        }
+        CHECK(got.at("E3").style.borders.diagonal_up.color && got.at("E3").style.borders.diagonal_up.color->to_hex() == "#ff0000");
         CHECK(sc::office::excel::name(horizontal::center_across) == "centerContinuous");
         CHECK(sc::office::excel::vertical_named("center") == vertical::center);
         CHECK_THROWS_AS((void) sc::office::excel::horizontal_named("middle"), std::invalid_argument);
@@ -434,6 +456,13 @@ int main() {
         sheet["D1"].style.alignment.indent = 251;
         CHECK_THROWS_AS((void) sc::office::excel::bytes(book), std::invalid_argument);
         sheet["D1"].style.alignment.indent = 0;
+        sheet["D1"].style.alignment.rotation = 91;
+        CHECK_THROWS_AS((void) sc::office::excel::bytes(book), std::invalid_argument);
+        sheet["D1"].style.alignment.rotation = 0;
+        sheet["D1"].style.borders.diagonal_up = {line::thin};
+        sheet["D1"].style.borders.diagonal_down = {line::thick};      // the two drawn differently
+        CHECK_THROWS_AS((void) sc::office::excel::bytes(book), std::invalid_argument);
+        sheet["D1"].style.borders = {};
         sheet["D1"].style.number_format = std::string(256, '0');
         CHECK_THROWS_AS((void) sc::office::excel::bytes(book), std::invalid_argument);
     }
@@ -595,6 +624,17 @@ int main() {
         }
         CHECK(sheet.contains("I1") && sheet.at("I1").style.number_format == "0.00%"); // Excel's own 10
         CHECK(sheet.contains("I1") && sheet.at("I1").style.alignment.horizontal == sc::office::excel::horizontal::general); // a name Excel lacks
+        // Both diagonals, dashed red; turned 45 degrees down (135); stacked (255).
+        CHECK(sheet.contains("J1") && sheet.contains("K1"));
+        if (sheet.contains("J1") && sheet.contains("K1")) {
+            const auto &crossed = sheet.at("J1").style;
+            CHECK(crossed.borders.diagonal_up.line == sc::office::excel::line::dashed);
+            CHECK(crossed.borders.diagonal_up.color && crossed.borders.diagonal_up.color->to_hex() == "#ff0000");
+            CHECK(crossed.borders.diagonal_down == crossed.borders.diagonal_up);
+            CHECK(crossed.borders.left.line == sc::office::excel::line::none);
+            CHECK_EQ(crossed.alignment.rotation, -45);
+            CHECK(sheet.at("K1").style.alignment.stacked && sheet.at("K1").style.alignment.rotation == 0);
+        }
         // Italic, double underline; borders by start and end (left and right), theme colours, a
         // line Excel doesn't have drawn thin, indexed 64 (automatic) as no colour.
         CHECK(sheet.contains("F1"));

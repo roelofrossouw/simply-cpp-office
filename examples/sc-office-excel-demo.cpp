@@ -2,7 +2,8 @@
 // a small one with --write: a header in bold white on blue, widened columns, a total in bold between
 // a thin line and a double one, as accountants rule them, prices to two decimals, a taller header
 // row kept in view as the rest scrolls, a hidden cost column, an italic, underlined note merged
-// across both columns, a discontinued item struck through, and a hidden row of internal notes.
+// across both columns, a discontinued item struck through with its price crossed out, a hidden row
+// of internal notes, and a label turned 45 degrees.
 //
 //     sc-office-excel-demo prices.xlsx
 //     sc-office-excel-demo --write sample.xlsx
@@ -59,6 +60,10 @@ namespace {
         prices.hidden_column("C", true);
         prices["A7"] = "Butter (discontinued)";
         prices["A7"].style.font.strike = true;
+        prices["B7"].style.borders.diagonal_up = prices["B7"].style.borders.diagonal_down = {line::thin, sc::color{"#c00000"}};
+        prices["A9"] = "Turned 45 degrees";
+        prices["A9"].style.alignment.rotation = 45;
+        prices.height(8, 60);
         prices["A8"] = "Internal: check the milk supplier";
         prices.hidden_row(7, true); // row 8
         for (const auto *cell: {"B2", "B3", "B4"}) prices[cell].style.number_format = "#,##0.00";

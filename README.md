@@ -72,9 +72,12 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
   `double_accounting`), and `borders`: `left`, `right`, `top` and `bottom`, each an `excel::edge`
   of a `line` (`excel::line`: `thin`, `medium`, `thick`, `doubled`, `dashed`, `dotted`, `hair` and
   Excel's dash-dot kinds) and a `color`; `excel::borders::all({excel::line::thin})` puts one edge
-  on all four sides. `alignment`: `horizontal` (`excel::horizontal`: `general`, `left`, `center`,
-  `right`, `fill`, `justify`, `center_across`, `distributed`), `vertical` (`excel::vertical`:
-  `bottom`, `top`, `center`, `justify`, `distributed`), `wrap` and `indent` (0 to 250).
+  on all four sides; `diagonal_up` and `diagonal_down` are the diagonals (Excel draws both alike,
+  so two different ones throw on writing). `alignment`: `horizontal` (`excel::horizontal`:
+  `general`, `left`, `center`, `right`, `fill`, `justify`, `center_across`, `distributed`),
+  `vertical` (`excel::vertical`:
+  `bottom`, `top`, `center`, `justify`, `distributed`), `wrap`, `indent` (0 to 250),
+  `rotation` (degrees counter-clockwise, -90 to 90) and `stacked` (letters one under another).
   `number_format` is Excel's format code (`"0.00"`, `"#,##0"`, `"0%"`, `"yyyy-mm-dd"`, `"@"`),
   empty for General; a date is a number shown as one by a date format. `name(line::doubled)` is
   Excel's `"double"`, `line_named("double")` the line (likewise for underlines and alignments).
@@ -126,8 +129,7 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
   opens the file. It throws `std::invalid_argument` for a workbook without sheets, a number that
   isn't finite or a font size outside 1 to 409 points, and then leaves no file behind.
 
-Not covered yet: fonts other than Calibri, diagonal borders, text rotation, split (unfrozen)
-panes, pictures and charts.
+Not covered yet: fonts other than Calibri, split (unfrozen) panes, pictures and charts.
 
 **TODO:** pictures in `.xlsx` and `.pptx`. The old binary `.doc` and `.xls` formats aren't
 planned.
@@ -154,7 +156,8 @@ std::cout << pictures.size() << " pictures\n";
 their values and formulas; `sc-office-excel-demo --write FILE` writes a small
 workbook, with a styled, centred, taller header kept in view, widened columns, a hidden cost
 column, prices to two decimals, a ruled total, an italic note merged across two columns, a
-discontinued item struck through and a hidden row.
+discontinued item struck through with its price crossed out, a hidden row and a label turned 45
+degrees.
 
 <!-- sc-example: examples/sc-office-excel-demo.cpp -->
 ```cpp

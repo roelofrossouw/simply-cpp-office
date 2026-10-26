@@ -276,6 +276,13 @@ namespace sc::office::excel {
             if (const auto kind = (*element)["vertical"]; !kind.empty()) made.vertical = named_or(vertical_named, kind, vertical::bottom);
             made.wrap = (*element)["wrapText"] == "1" || (*element)["wrapText"] == "true";
             if (const auto indent = (*element)["indent"]; !indent.empty()) made.indent = static_cast<unsigned>(std::clamp(number(indent), 0.0, 250.0));
+            // textRotation: 0 to 90 up, 91 to 180 down (90 less it), 255 stacked.
+            if (const auto rotation = (*element)["textRotation"]; !rotation.empty()) {
+                const auto degrees = static_cast<int>(number(rotation));
+                if (degrees == 255) made.stacked = true;
+                else if (degrees > 90 && degrees <= 180) made.rotation = 90 - degrees;
+                else if (degrees >= 0 && degrees <= 90) made.rotation = degrees;
+            }
             return made;
         }
 
@@ -330,7 +337,10 @@ namespace sc::office::excel {
                     // start and end are what newer files call left and right.
                     const auto left = each.child("left") ? each.child("left") : each.child("start");
                     const auto right = each.child("right") ? each.child("right") : each.child("end");
-                    borders.push_back({edge_of(left, theme), edge_of(right, theme), edge_of(each.child("top"), theme), edge_of(each.child("bottom"), theme)});
+                    const auto diagonal = edge_of(each.child("diagonal"), theme);
+                    const auto yes = [&](const std::string_view name) { return each[name] == "1" || each[name] == "true"; };
+                    borders.push_back({edge_of(left, theme), edge_of(right, theme), edge_of(each.child("top"), theme), edge_of(each.child("bottom"), theme),
+                                       yes("diagonalUp") ? diagonal : edge{}, yes("diagonalDown") ? diagonal : edge{}});
                 }
             }
             std::vector<std::optional<sc::color>> fills;
@@ -562,11 +572,14 @@ namespace sc::office::excel {
                     if (each.alignment != alignment{}) {
                         const auto &align = each.alignment;
                         if (align.indent > 250) throw std::invalid_argument("excel: an indent is from 0 to 250");
+                        if (align.rotation < -90 || align.rotation > 90) throw std::invalid_argument("excel: a rotation is from -90 to 90 degrees");
                         aligned = "<alignment";
                         if (align.horizontal != horizontal::general) aligned += R"( horizontal=")" + std::string{name(align.horizontal)} + '"';
                         if (align.vertical != vertical::bottom) aligned += R"( vertical=")" + std::string{name(align.vertical)} + '"';
                         if (align.wrap) aligned += R"( wrapText="1")";
                         if (align.indent) aligned += R"( indent=")" + std::to_string(align.indent) + '"';
+                        if (align.stacked) aligned += R"( textRotation="255")";
+                        else if (align.rotation) aligned += R"( textRotation=")" + std::to_string(align.rotation > 0 ? align.rotation : 90 - align.rotation) + '"';
                         aligned += "/>";
                     }
                     xfs += R"(<xf numFmtId=")" + std::to_string(format_id) + R"(" fontId=")" + std::to_string(font_id) + R"(" fillId=")" +
@@ -608,8 +621,12 @@ namespace sc::office::excel {
                         return "<" + std::string{tag} + R"( style=")" + std::string{name(edge.line)} + R"(">)" +
                                (edge.color ? R"(<color rgb=")" + argb(*edge.color) + R"("/>)" : std::string{}) + "</" + tag + ">";
                     };
-                    xml += "<border>" + side("left", each.left) + side("right", each.right) + side("top", each.top) + side("bottom", each.bottom) +
-                           "<diagonal/></border>";
+                    const auto &up = each.diagonal_up, &down = each.diagonal_down;
+                    const bool upward = up.line != line::none, downward = down.line != line::none;
+                    if (upward && downward && up != down) throw std::invalid_argument("excel: both diagonals are drawn alike, so they must be the same edge");
+                    xml += std::string{"<border"} + (upward ? R"( diagonalUp="1")" : "") + (downward ? R"( diagonalDown="1")" : "") + ">" +
+                           side("left", each.left) + side("right", each.right) + side("top", each.top) + side("bottom", each.bottom) +
+                           side("diagonal", upward ? up : down) + "</border>";
                 }
                 xml += R"(</borders>)"
                        R"(<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count=")" +

@@ -62,23 +62,31 @@ namespace sc::office::excel {
         bool operator==(const edge &) const = default;
     };
 
-    // A cell's borders, side by side.
+    // A cell's borders, side by side, and its diagonals: up from bottom left to top right, down from
+    // top left to bottom right. Excel draws both diagonals alike, so when both are set they must be
+    // the same edge (writing throws otherwise).
     struct borders {
         edge left, right, top, bottom;
+        edge diagonal_up, diagonal_down;
 
-        // The same edge on all four sides: excel::borders::all({excel::line::thin}).
+        // The same edge on all four sides (no diagonals): excel::borders::all({excel::line::thin}).
         [[nodiscard]] static borders all(const edge &each) { return {each, each, each, each}; }
 
         bool operator==(const borders &) const = default;
     };
 
-    // Where a cell's text sits, whether it wraps onto more lines, and how far it's indented (in
-    // steps of about three characters' width, up to 250).
+    // Where a cell's text sits, whether it wraps onto more lines, how far it's indented (in steps of
+    // about three characters' width, up to 250), and how it's turned.
     struct alignment {
         excel::horizontal horizontal = horizontal::general;
         excel::vertical vertical = vertical::bottom;
         bool wrap = false;
         unsigned indent = 0;
+        // Degrees counter-clockwise, from -90 (reading downwards) to 90 (upwards), as Excel's
+        // Orientation shows them.
+        int rotation = 0;
+        // Letters stacked one under another (Excel's Vertical Text); rotation then counts for nothing.
+        bool stacked = false;
 
         bool operator==(const alignment &) const = default;
     };
