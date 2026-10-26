@@ -84,7 +84,13 @@ namespace {
     <font><b/><sz val="16"/><color theme="0"/><name val="Calibri"/></font>
     <font><b val="0"/><sz val="11"/><color rgb="FFC00000"/><name val="Calibri"/></font>
     <font><sz val="11"/><color indexed="10"/><name val="Calibri"/></font>
+    <font><i/><u val="double"/><sz val="11"/><color theme="1"/><name val="Calibri"/></font>
+    <font><u/><sz val="11"/><color theme="1"/><name val="Calibri"/></font>
   </fonts>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/><diagonal/></border>
+    <border><start style="thin"><color indexed="64"/></start><end style="mediumDashDot"/><top style="double"><color theme="4"/></top><bottom style="madeUp"/><diagonal/></border>
+  </borders>
   <fills count="4">
     <fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
     <fill><patternFill patternType="solid"><fgColor theme="4" tint="0.79998168889431442"/><bgColor indexed="64"/></patternFill></fill>
@@ -96,6 +102,8 @@ namespace {
     <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
     <xf numFmtId="0" fontId="3" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
     <xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>
+    <xf numFmtId="0" fontId="5" fillId="0" borderId="0" xfId="0" applyFont="1"/>
   </cellXfs>
 </styleSheet>)";
     const std::string styled_sheet = R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -106,7 +114,7 @@ namespace {
     <col min="5" max="16384" width="9.140625" style="1"/>
   </cols>
   <sheetData>
-    <row r="1"><c r="A1" s="1" t="inlineStr"><is><t>Header</t></is></c><c r="B1" s="2"><v>1</v></c><c r="C1" s="3"/><c r="D1" s="4"/><c r="E1" s="9"><v>2</v></c></row>
+    <row r="1"><c r="A1" s="1" t="inlineStr"><is><t>Header</t></is></c><c r="B1" s="2"><v>1</v></c><c r="C1" s="3"/><c r="D1" s="4"/><c r="E1" s="9"><v>2</v></c><c r="F1" s="5"/><c r="G1" s="6"><v>3</v></c></row>
   </sheetData>
 </worksheet>)";
 
@@ -332,6 +340,14 @@ int main() {
         sheet["A2"].style = sheet["A1"].style;          // the same style: written once
         sheet["B2"] = 2.0;
         sheet["B2"] = 3.0;                              // setting the value keeps the style
+        using sc::office::excel::line;
+        using sc::office::excel::underline;
+        sheet["D2"] = "Fancy";
+        sheet["D2"].style.font.italic = true;
+        sheet["D2"].style.font.underline = underline::double_accounting;
+        sheet["D2"].style.borders = sc::office::excel::borders::all({line::thin});
+        sheet["D2"].style.borders.bottom = {line::doubled, sc::color{"#1f4e79"}};
+        sheet["E2"].style.borders = sheet["D2"].style.borders; // the same borders: written once
         sheet.width("A", 30);
         sheet.width(1, 12.5);
         sheet.width("C", 12.5);                         // B and C: one <col>
@@ -349,7 +365,10 @@ int main() {
 
         const auto bytes = sc::office::excel::bytes(book);
         const auto archive = sc::archive::from_memory(bytes);
-        CHECK(archive.read("xl/styles.xml").find(R"(<cellXfs count="4">)") != std::string::npos); // plain, A1 and A2, B1, C1
+        const auto styles_xml = archive.read("xl/styles.xml");
+        CHECK(styles_xml.find(R"(<cellXfs count="6">)") != std::string::npos); // plain, A1 and A2, B1, C1, D2, E2
+        CHECK(styles_xml.find(R"(<borders count="2">)") != std::string::npos);
+        CHECK(styles_xml.find(R"(<i/><u val="doubleAccounting"/>)") != std::string::npos);
         const auto xml = archive.read("xl/worksheets/sheet1.xml");
         CHECK(xml.find(R"(<col min="2" max="3" width="12.5" customWidth="1"/>)") != std::string::npos);
         CHECK(xml.find(R"(<c r="B2"><v>3</v></c>)") != std::string::npos); // plain: no s=
@@ -366,6 +385,18 @@ int main() {
         CHECK(got.contains("C1") && got.at("C1").style.background && got.at("C1").style.background->to_hex() == "#ff0000");
         CHECK(got.at("B2").style.empty());
         CHECK(got.widths() == sheet.widths());
+        const auto &fancy = got.at("D2").style;
+        CHECK(fancy.font.italic && fancy.font.underline == underline::double_accounting);
+        CHECK(fancy.borders.left == (sc::office::excel::edge{line::thin}));
+        CHECK(fancy.borders.top.line == line::thin && fancy.borders.right.line == line::thin);
+        CHECK(fancy.borders.bottom.line == line::doubled && fancy.borders.bottom.color && fancy.borders.bottom.color->to_hex() == "#1f4e79");
+        CHECK(got.contains("E2") && got.at("E2").style.borders.left.line == line::thin);
+
+        CHECK(sc::office::excel::name(line::medium_dash_dot_dot) == "mediumDashDotDot");
+        CHECK(sc::office::excel::line_named("double") == line::doubled);
+        CHECK(sc::office::excel::underline_named("singleAccounting") == underline::single_accounting);
+        CHECK_THROWS_AS((void) sc::office::excel::line_named("Thin"), std::invalid_argument);
+        CHECK_THROWS_AS((void) sc::office::excel::underline_named("wavy"), std::invalid_argument);
 
         sheet["D1"].style.font.size = 500;
         CHECK_THROWS_AS((void) sc::office::excel::bytes(book), std::invalid_argument);
@@ -408,6 +439,20 @@ int main() {
             }
         }
         CHECK(!sheet.contains("D1"));                 // a date format only: nothing we keep
+        // Italic, double underline; borders by start and end (left and right), theme colours, a
+        // line Excel doesn't have drawn thin, indexed 64 (automatic) as no colour.
+        CHECK(sheet.contains("F1"));
+        if (sheet.contains("F1")) {
+            const auto &look = sheet.at("F1").style;
+            CHECK(look.font.italic && !look.font.bold);
+            CHECK(look.font.underline == sc::office::excel::underline::doubled);
+            CHECK(look.borders.left.line == sc::office::excel::line::thin && !look.borders.left.color);
+            CHECK(look.borders.right.line == sc::office::excel::line::medium_dash_dot);
+            CHECK(look.borders.top.line == sc::office::excel::line::doubled);
+            CHECK(look.borders.top.color && look.borders.top.color->to_hex() == "#4472c4");
+            CHECK(look.borders.bottom.line == sc::office::excel::line::thin);
+        }
+        CHECK(sheet.at("G1").style.font.underline == sc::office::excel::underline::single); // <u/>: single
         CHECK(sheet.at("E1").style.empty());          // a style that isn't there
         CHECK_EQ(sheet.widths().size(), std::size_t{4}); // A, and B to D; not the styled rest
         CHECK(sheet.width("A") == 20.7109375);

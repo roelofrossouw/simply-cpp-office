@@ -245,6 +245,28 @@ namespace sc::office::excel {
             return out;
         }
 
+        // What Excel names so, or otherwise when a file has a name Excel doesn't (it's drawn anyway).
+        template<typename Kind>
+        Kind named_or(Kind (*named)(std::string_view), const std::string_view name, const Kind otherwise) {
+            try {
+                return named(name);
+            } catch (const std::invalid_argument &) {
+                return otherwise;
+            }
+        }
+
+        // Whether a font's <b/>, <i/> ... is there and on (val="0" or "false" turns it off).
+        bool on(const std::optional<web::element> &flag) { return flag && (*flag)["val"] != "0" && (*flag)["val"] != "false"; }
+
+        // A border's side: <left style="thin"><color rgb="FF000000"/></left>.
+        edge edge_of(const std::optional<web::element> &side, const std::vector<sc::color> &theme) {
+            edge made;
+            if (!side || (*side)["style"].empty()) return made;
+            made.line = named_or(line_named, (*side)["style"], line::thin);
+            if (const auto color = side->child("color")) made.color = color_of(*color, theme);
+            return made;
+        }
+
         // The styles cells point to (s="3": cellXfs' fourth), as excel::style: what's the same as the
         // workbook's default font is left unset.
         std::vector<style> styles_of(const archive::reader &book, const std::string &path, const std::vector<sc::color> &theme) {
@@ -257,7 +279,12 @@ namespace sc::office::excel {
                     font made;
                     if (const auto size = each.child("sz"); size && !(*size)["val"].empty()) made.size = number((*size)["val"]);
                     if (const auto color = each.child("color")) made.color = color_of(*color, theme);
-                    if (const auto bold = each.child("b")) made.bold = (*bold)["val"] != "0" && (*bold)["val"] != "false";
+                    made.bold = on(each.child("b"));
+                    made.italic = on(each.child("i"));
+                    if (const auto underline = each.child("u")) {
+                        const auto kind = (*underline)["val"];
+                        made.underline = kind.empty() ? underline::single : named_or(underline_named, kind, underline::single);
+                    }
                     fonts.push_back(made);
                 }
             }
@@ -266,6 +293,15 @@ namespace sc::office::excel {
                 for (auto &each: fonts) {
                     if (each.size && plain.size && each.size->points() == plain.size->points()) each.size.reset();
                     if (each.color == plain.color) each.color.reset();
+                }
+            }
+            std::vector<excel::borders> borders;
+            if (const auto list = root.child("borders")) {
+                for (const auto &each: list->children("border")) {
+                    // start and end are what newer files call left and right.
+                    const auto left = each.child("left") ? each.child("left") : each.child("start");
+                    const auto right = each.child("right") ? each.child("right") : each.child("end");
+                    borders.push_back({edge_of(left, theme), edge_of(right, theme), edge_of(each.child("top"), theme), edge_of(each.child("bottom"), theme)});
                 }
             }
             std::vector<std::optional<sc::color>> fills;
@@ -283,6 +319,8 @@ namespace sc::office::excel {
                     style made;
                     if (const auto id = xf["fontId"]; !id.empty())
                         if (const auto at = static_cast<std::size_t>(number(id)); at < fonts.size()) made.font = fonts[at];
+                    if (const auto id = xf["borderId"]; !id.empty())
+                        if (const auto at = static_cast<std::size_t>(number(id)); at < borders.size()) made.borders = borders[at];
                     if (const auto id = xf["fillId"]; !id.empty())
                         if (const auto at = static_cast<std::size_t>(number(id)); at < fills.size()) made.background = fills[at];
                     out.push_back(made);
@@ -453,13 +491,16 @@ namespace sc::office::excel {
 
             [[nodiscard]] std::string xml() {
                 std::vector<font> fonts{font{}};
+                std::vector<excel::borders> borders{excel::borders{}};
                 std::vector<sc::color> fills;
                 std::string xfs = R"(<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>)";
                 for (const auto &each: styles_) {
                     const auto font_id = position(fonts, each.font);
                     const auto fill_id = each.background ? position(fills, *each.background) + 2 : 0; // after none and gray125
-                    xfs += R"(<xf numFmtId="0" fontId=")" + std::to_string(font_id) + R"(" fillId=")" + std::to_string(fill_id) + R"(" borderId="0" xfId="0")" +
-                           (font_id ? R"( applyFont="1")" : "") + (fill_id ? R"( applyFill="1")" : "") + "/>";
+                    const auto border_id = position(borders, each.borders);
+                    xfs += R"(<xf numFmtId="0" fontId=")" + std::to_string(font_id) + R"(" fillId=")" + std::to_string(fill_id) + R"(" borderId=")" +
+                           std::to_string(border_id) + R"(" xfId="0")" + (font_id ? R"( applyFont="1")" : "") + (fill_id ? R"( applyFill="1")" : "") +
+                           (border_id ? R"( applyBorder="1")" : "") + "/>";
                 }
                 std::string xml{xml_declaration};
                 xml += R"(<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count=")" + std::to_string(fonts.size()) + R"(">)";
@@ -468,6 +509,9 @@ namespace sc::office::excel {
                         throw std::invalid_argument("excel: a font's size is from 1 to 409 points");
                     xml += "<font>";
                     if (each.bold) xml += "<b/>";
+                    if (each.italic) xml += "<i/>";
+                    if (each.underline == underline::single) xml += "<u/>";
+                    else if (each.underline != underline::none) xml += R"(<u val=")" + std::string{name(each.underline)} + R"("/>)";
                     xml += R"(<sz val=")" + number_text(each.size ? each.size->points() : 11) + R"("/>)";
                     if (each.color) xml += R"(<color rgb=")" + argb(*each.color) + R"("/>)";
                     xml += R"(<name val="Calibri"/><family val="2"/><scheme val="minor"/></font>)";
@@ -476,7 +520,17 @@ namespace sc::office::excel {
                        R"("><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>)";
                 for (const auto &each: fills)
                     xml += R"(<fill><patternFill patternType="solid"><fgColor rgb=")" + argb(each) + R"("/><bgColor indexed="64"/></patternFill></fill>)";
-                xml += R"(</fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>)"
+                xml += R"(</fills><borders count=")" + std::to_string(borders.size()) + R"(">)";
+                for (const auto &each: borders) {
+                    const auto side = [](const char *tag, const edge &edge) {
+                        if (edge.line == line::none) return "<" + std::string{tag} + "/>";
+                        return "<" + std::string{tag} + R"( style=")" + std::string{name(edge.line)} + R"(">)" +
+                               (edge.color ? R"(<color rgb=")" + argb(*edge.color) + R"("/>)" : std::string{}) + "</" + tag + ">";
+                    };
+                    xml += "<border>" + side("left", each.left) + side("right", each.right) + side("top", each.top) + side("bottom", each.bottom) +
+                           "<diagonal/></border>";
+                }
+                xml += R"(</borders>)"
                        R"(<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count=")" +
                        std::to_string(styles_.size() + 1) + R"(">)" + xfs +
                        R"(</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>)";

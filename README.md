@@ -46,6 +46,8 @@ prices["B3"].formula = "=B2*2";
 prices["A1"].style = {.font = {.size = 14, .color = sc::color::White, .bold = true},
                       .background = sc::color{"#4472c4"}};
 prices["B3"].style.font.bold = true;
+prices["B3"].style.borders.top = {sc::office::excel::line::thin};
+prices["B3"].style.borders.bottom = {sc::office::excel::line::doubled, sc::color{"#1f4e79"}};
 prices.width("A", 20);                   // in characters, as Excel shows it
 sc::office::excel::write(out, "out.xlsx");
 ```
@@ -58,8 +60,13 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
   numbers, days since 1899-12-30 as Excel keeps them; an error such as `#DIV/0!` reads as its
   text. `cell = value` sets the value; `name()` gives `"B3"`. Its `style` (`excel::style`) is how
   it looks: `font.size` (an `sc::distance`, so a plain number is points), `font.color` and
-  `background` (`sc::color`, a solid fill; alpha is left out), `font.bold`. What isn't set is
-  Excel's default (Calibri 11, automatic colour, no fill).
+  `background` (`sc::color`, a solid fill; alpha is left out), `font.bold`, `font.italic`,
+  `font.underline` (`excel::underline`: `single`, `doubled`, `single_accounting`,
+  `double_accounting`), and `borders`: `left`, `right`, `top` and `bottom`, each an `excel::edge`
+  of a `line` (`excel::line`: `thin`, `medium`, `thick`, `doubled`, `dashed`, `dotted`, `hair` and
+  Excel's dash-dot kinds) and a `color`; `excel::borders::all({excel::line::thin})` puts one edge
+  on all four sides. `name(line::doubled)` is Excel's `"double"`, `line_named("double")` the line.
+  What isn't set is Excel's default (Calibri 11, automatic colour, no fill, no borders).
 - **Addresses** (`excel::address`): `{row, column}`, or Excel's name, `"B3"`; `name()` gives it
   back, `column_name(26)` gives `"AA"` and `column_index("AA")` 26.
 - **Rows** (`excel::row`): the cells that are set, in column order; `index()`, `contains(column)`,
@@ -88,7 +95,7 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
   opens the file. It throws `std::invalid_argument` for a workbook without sheets, a number that
   isn't finite or a font size outside 1 to 409 points, and then leaves no file behind.
 
-Not covered yet: fonts other than Calibri, italics and underlines, borders, alignment, number
+Not covered yet: fonts other than Calibri, strikethrough, diagonal borders, alignment, number
 formats, row heights, merged cells, pictures and charts.
 
 **TODO:** pictures in `.xlsx` and `.pptx`. The old binary `.doc` and `.xls` formats aren't
@@ -114,7 +121,7 @@ std::cout << pictures.size() << " pictures\n";
 
 `sc-office-excel-demo FILE` prints an `.xlsx`'s cells, sheet by sheet, with
 their values and formulas; `sc-office-excel-demo --write FILE` writes a small
-workbook, with a styled header and widened columns.
+workbook, with a styled header, widened columns, a ruled total and an italic note.
 
 <!-- sc-example: examples/sc-office-excel-demo.cpp -->
 ```cpp

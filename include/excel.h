@@ -12,9 +12,10 @@
 
 // Excel workbooks (.xlsx): sheets of cells, each with its value and formula, read and written. A
 // workbook is a ZIP archive of XML (Office Open XML), read and written with sc-archive and sc-web.
-// Cells have a style (font size, colour and bold; a background) and columns a width; no other
-// formatting, merged cells or pictures. Workbooks, sheets and rows work like the
-// standard containers: a sheet holds the rows that have cells, a row the cells that are set.
+// Cells have a style (font size, colour, bold, italic and underline; a background; borders) and
+// columns a width; no other formatting, merged cells or pictures. Workbooks, sheets and rows work
+// like the standard containers: a sheet holds the rows that have cells, a row the cells that are
+// set.
 //
 //     const auto book = sc::office::excel::read("prices.xlsx");
 //     for (const auto &sheet: book)
