@@ -9,17 +9,23 @@ get_sc_version()
 message(STATUS "SimplyCPP ${SC_MODULE} Version: ${SC_VERSION}")
 
 find_or_install_package(sc-core simply-cpp-dev simply-cpp 1.20.0)
-# Office files are ZIP archives of XML: sc-archive opens them, sc-web reads the XML.
+# Office files are ZIP archives of XML: sc-archive opens and writes them, sc-web reads the XML.
 find_or_install_package(sc-archive simply-cpp-archive-dev simply-cpp-archive 1.0.0)
 find_or_install_package(sc-web simply-cpp-web-dev simply-cpp-web 1.4.7)
 
-set(SOURCE_OBJECTS include/office.h)
+set(SOURCE_OBJECTS include/office.h include/excel_cell.h include/excel_iterator.h)
 set(SOURCE_LIBRARIES)
 set(SOURCE_LINK_LIBRARIES)
 
 add_sc_object(office
         LINK_LIBRARIES sc::sc-core sc::sc-archive sc::sc-web
         PUBLIC_LINK_LIBRARIES sc::sc-core sc::sc-archive sc::sc-web)
+# Excel: its cells, sheets and workbooks, then reading and writing them.
+add_sc_object(excel_address)
+add_sc_object(excel_row)
+add_sc_object(excel_sheet)
+add_sc_object(excel_workbook SOURCES src/excel_sheet_names.h LINK_LIBRARIES sc::sc-core)
+add_sc_object(excel SOURCES src/excel_sheet_names.h LINK_LIBRARIES sc::sc-core sc::sc-archive sc::sc-web)
 
 add_sc_libraries(DESCRIPTION "simply-cpp Office documents")
 target_compile_features(sc-office PUBLIC cxx_std_20)

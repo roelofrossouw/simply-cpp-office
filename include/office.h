@@ -1,17 +1,20 @@
 #pragma once
 
+#include "excel.h"
+
 #include <filesystem>
 #include <string>
 #include <string_view>
 #include <vector>
 
-// Office documents: Word (.docx) so far; Excel (.xlsx) to come. They're ZIP archives of XML
-// (Office Open XML), read with sc-archive and sc-web.
+// Office documents: a Word document's pictures (.docx) here, an Excel workbook's cells (.xlsx) in
+// excel.h, which this includes. They're ZIP archives of XML (Office Open XML), read with sc-archive
+// and sc-web.
 //
 //     for (const auto &picture: sc::office::word::images("statement.docx"))
 //         if (picture.raster()) process(picture.name, picture.bytes);
 //
-// TODO: Excel: sheets, cells and their values; pictures in .xlsx and .pptx.
+// TODO: pictures in .xlsx and .pptx.
 namespace sc::office {
     // A picture embedded in a document, as stored: name is its file name in the document
     // ("image1.png"), bytes its file's bytes.

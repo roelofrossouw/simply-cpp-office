@@ -1,0 +1,45 @@
+#pragma once
+
+#include "excel_address.h"
+#include "excel_cell.h"
+#include "excel_row.h"
+#include "excel_sheet.h"
+#include "excel_workbook.h"
+
+#include <filesystem>
+#include <string>
+
+// Excel workbooks (.xlsx): sheets of cells, each with its value and formula, read and written. A
+// workbook is a ZIP archive of XML (Office Open XML), read and written with sc-archive and sc-web.
+// No formatting, styles, merged cells or pictures. Workbooks, sheets and rows work like the
+// standard containers: a sheet holds the rows that have cells, a row the cells that are set.
+//
+//     const auto book = sc::office::excel::read("prices.xlsx");
+//     for (const auto &sheet: book)
+//         for (const auto &row: sheet)
+//             for (const auto &cell: row)
+//                 cell.row, cell.column, cell.value, cell.formula;   // 3, 4, "Hello", "=C6"
+//     if (book.contains("Prices") && book["Prices"].contains("B2"))
+//         total = std::get<double>(book["Prices"].at("B2").value);
+//
+//     sc::office::excel::workbook out;
+//     auto &sheet = out["Prices"];            // added, as std::map would
+//     sheet["A1"] = "Item";
+//     sheet[{1, 1}] = 12.5;                   // B2
+//     sheet["B3"].formula = "=B2*2";
+//     sc::office::excel::write(out, "out.xlsx");
+namespace sc::office::excel {
+    // Reads every sheet's cells, in the workbook's order: values, and formulas with "=" (a formula
+    // Excel keeps once for a range is given to each cell, its relative references moved). Throws
+    // std::runtime_error for a file that isn't an .xlsx (not a ZIP archive, or no
+    // xl/workbook.xml).
+    [[nodiscard]] workbook read(const std::filesystem::path &file);
+    // The same, for an .xlsx held in memory.
+    [[nodiscard]] workbook read_from(std::string bytes);
+
+    // Writes the workbook as an .xlsx: each cell's value and formula, text inline, no styles.
+    // Excel calculates the formulas when it opens the file. Throws std::invalid_argument for a
+    // workbook without sheets, a sheet name Excel doesn't take (one read from a file) or a number
+    // that isn't finite.
+    void write(const workbook &book, const std::filesystem::path &file);
+}

@@ -1,1 +1,1 @@
-Office documents (Word, later Excel) for simply-cpp
+Office documents (Word pictures, Excel cells) for simply-cpp
