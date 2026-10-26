@@ -22,6 +22,7 @@ add_sc_object(office
         PUBLIC_LINK_LIBRARIES sc::sc-core sc::sc-archive sc::sc-web)
 # Excel: its cells, sheets and workbooks, then reading and writing them.
 add_sc_object(excel_address)
+add_sc_object(excel_range)
 add_sc_object(excel_style LINK_LIBRARIES sc::sc-core)
 add_sc_object(excel_row)
 add_sc_object(excel_sheet)

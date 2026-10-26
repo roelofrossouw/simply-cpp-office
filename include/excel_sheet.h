@@ -1,16 +1,21 @@
 #pragma once
 
 #include "excel_address.h"
+#include "excel_range.h"
 #include "excel_row.h"
+
+#include <distance.h>
 
 #include <cstddef>
 #include <map>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 #include <utility>
 
-// Excel (sc-office): a sheet, holding the rows that have cells, and its columns' widths.
+// Excel (sc-office): a sheet, holding the rows that have cells, its columns' widths, its rows'
+// heights and its merged cells.
 namespace sc::office::excel {
     // A sheet: the rows that have cells, in order.
     class sheet {
@@ -42,6 +47,25 @@ namespace sc::office::excel {
         // The columns given a width, by number.
         [[nodiscard]] const std::map<std::size_t, double> &widths() const { return widths_; }
 
+        // A row's height, in points (a plain number is points: Excel's unit); none: Excel's default
+        // (15 for Calibri 11, more when the text needs it). By number from 0.
+        [[nodiscard]] std::optional<sc::distance> height(std::size_t row) const;
+        // Sets a row's height, from 0 to 409 points (0 hides it); std::nullopt gives it Excel's
+        // default. A row with a height and no cells is kept. Throws std::out_of_range beyond row
+        // 1048576 or 409 points.
+        void height(std::size_t row, std::optional<sc::distance> points);
+        // The rows given a height, by number.
+        [[nodiscard]] const std::map<std::size_t, sc::distance> &heights() const { return heights_; }
+
+        // Merges the cells of a range into one, shown as its top left cell (the others keep what
+        // they hold, as Excel keeps it hidden): merge("A1:D1"). Throws std::invalid_argument for one
+        // cell, or one that overlaps a merge already there; std::out_of_range beyond XFD1048576.
+        void merge(const range &cells);
+        // Undoes the merge of exactly that range: 1, or 0 when there's none (as std::map's erase).
+        std::size_t unmerge(const range &cells);
+        // The merged ranges, in the order they were merged (or read).
+        [[nodiscard]] const std::vector<range> &merged() const { return merged_; }
+
         [[nodiscard]] auto begin() { return detail::values_iterator{rows_.begin()}; }
         [[nodiscard]] auto end() { return detail::values_iterator{rows_.end()}; }
         [[nodiscard]] auto begin() const { return detail::values_iterator{rows_.cbegin()}; }
@@ -54,5 +78,7 @@ namespace sc::office::excel {
         std::string name_;
         std::map<std::size_t, row> rows_;
         std::map<std::size_t, double> widths_;
+        std::map<std::size_t, sc::distance> heights_;
+        std::vector<range> merged_;
     };
 }

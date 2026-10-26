@@ -1,5 +1,6 @@
 #include "excel_sheet.h"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
@@ -45,4 +46,30 @@ namespace sc::office::excel {
             throw std::out_of_range("excel: a column's width is from 0 to 255 characters");
         widths_[column] = *characters;
     }
+
+    std::optional<sc::distance> sheet::height(const std::size_t row) const {
+        if (const auto found = heights_.find(row); found != heights_.end()) return found->second;
+        return std::nullopt;
+    }
+
+    void sheet::height(const std::size_t row, const std::optional<sc::distance> points) {
+        if (row >= max_rows) throw std::out_of_range("excel: a row beyond 1048576");
+        if (!points) {
+            heights_.erase(row);
+            return;
+        }
+        if (!std::isfinite(points->points()) || points->points() < 0 || points->points() > 409)
+            throw std::out_of_range("excel: a row's height is from 0 to 409 points");
+        heights_[row] = *points;
+    }
+
+    void sheet::merge(const range &cells) {
+        if (cells.last.row >= max_rows || cells.last.column >= max_columns) throw std::out_of_range("excel: a range beyond XFD1048576");
+        if (cells.first == cells.last) throw std::invalid_argument("excel: merging " + cells.name() + " needs more than one cell");
+        for (const auto &each: merged_)
+            if (each.overlaps(cells)) throw std::invalid_argument("excel: " + cells.name() + " overlaps " + each.name() + ", merged already");
+        merged_.push_back(cells);
+    }
+
+    std::size_t sheet::unmerge(const range &cells) { return std::erase(merged_, cells); }
 }

@@ -51,6 +51,8 @@ prices["B3"].style.borders.bottom = {sc::office::excel::line::doubled, sc::color
 prices["B3"].style.number_format = "#,##0.00";
 prices["A1"].style.alignment = {.horizontal = sc::office::excel::horizontal::center, .wrap = true};
 prices.width("A", 20);                   // in characters, as Excel shows it
+prices.height(0, 24);                    // row 1, in points
+prices.merge("A5:B5");                   // shown as one cell, A5
 sc::office::excel::write(out, "out.xlsx");
 ```
 
@@ -85,7 +87,14 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
   removes it, and its row with its last cell. `width(column)` is a column's width in characters
   (so many `0`s, as Excel shows it), none for Excel's default; `width(column, characters)` sets it
   (0 to 255; `std::nullopt` for the default), the column by number or letters (`"B"`); `widths()`
-  lists them.
+  lists them. `height(row)` is a row's height in points (an `sc::distance`), none for Excel's
+  default; `height(row, points)` sets it (0 to 409, 0 hides it; `std::nullopt` for the default)
+  and `heights()` lists them; a row with a height and no cells is kept. `merge(range)` merges a
+  block of cells into one, shown as its top left (throwing for one cell or an overlap with a merge
+  already there), `unmerge(range)` undoes exactly that merge, `merged()` lists them.
+- **Ranges** (`excel::range`): `"A1:D3"`, or two opposite corners (`{"D3", "A1"}` is A1:D3);
+  `first` and `last` (top left, bottom right), `name()`, `contains(address)`, `overlaps(range)`,
+  `size()`.
 - **Workbooks** (`excel::workbook`): the sheets in order, `size()`, `empty()`, `front()`.
   `contains(name)`, `at(name)` and `book[name]` find a sheet ignoring case, as Excel does;
   `book[name]` adds it when there's none (on a const workbook it's `at()`). `add(name)` adds one,
@@ -99,14 +108,15 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
   workbook's default font left unset, and number formats as their codes (Excel's built-in ones
   too: 14, the reader's own short date, reads as `"mm-dd-yy"`); a cell with a style and no value
   is kept. Column widths
-  are those set by hand (`customWidth`). A file that isn't an `.xlsx` throws `std::runtime_error`.
+  are those set by hand (`customWidth`), and row heights likewise (`customHeight`); merged
+  cells too, one overlapping an earlier one left out. A file that isn't an `.xlsx` throws `std::runtime_error`.
 - **Writing** (`write(book, file)`, or `bytes(book)` for the file's bytes): each cell's value,
   formula and style, text inline, and the columns' widths; Excel calculates the formulas when it
   opens the file. It throws `std::invalid_argument` for a workbook without sheets, a number that
   isn't finite or a font size outside 1 to 409 points, and then leaves no file behind.
 
-Not covered yet: fonts other than Calibri, strikethrough, diagonal borders, text rotation, row
-heights, merged cells, pictures and charts.
+Not covered yet: fonts other than Calibri, strikethrough, diagonal borders, text rotation, hidden
+columns, frozen panes, pictures and charts.
 
 **TODO:** pictures in `.xlsx` and `.pptx`. The old binary `.doc` and `.xls` formats aren't
 planned.
@@ -131,8 +141,8 @@ std::cout << pictures.size() << " pictures\n";
 
 `sc-office-excel-demo FILE` prints an `.xlsx`'s cells, sheet by sheet, with
 their values and formulas; `sc-office-excel-demo --write FILE` writes a small
-workbook, with a styled, centred header, widened columns, prices to two decimals, a ruled total
-and an italic note.
+workbook, with a styled, centred, taller header, widened columns, prices to two decimals, a ruled
+total and an italic note merged across two columns.
 
 <!-- sc-example: examples/sc-office-excel-demo.cpp -->
 ```cpp

@@ -420,6 +420,15 @@ namespace sc::office::excel {
                     for (auto column = std::max<std::size_t>(first, 1); column <= last; ++column) out.width(column - 1, width);
                 }
             }
+            // Merged cells; one that isn't a range, or overlaps one before it, is left out.
+            if (const auto merges = document.root().child("mergeCells")) {
+                for (const auto &each: merges->children("mergeCell")) {
+                    try {
+                        out.merge(range{each["ref"]});
+                    } catch (const std::exception &) {
+                    }
+                }
+            }
             const auto data = document.root().child("sheetData");
             if (!data) return out;
             std::map<std::string, shared_formula> formulas;
@@ -428,6 +437,8 @@ namespace sc::office::excel {
                 std::size_t row_index = next_row;
                 if (const auto r = row["r"]; !r.empty()) row_index = static_cast<std::size_t>(number(r)) - 1;
                 next_row = row_index + 1;
+                if (const auto custom = row["customHeight"]; (custom == "1" || custom == "true") && !row["ht"].empty() && row_index < max_rows)
+                    out.height(row_index, std::clamp(number(row["ht"]), 0.0, 409.0));
                 std::size_t next_column = 0;
                 for (const auto &c: row.children("c")) {
                     address where{row_index, next_column};
@@ -652,13 +663,27 @@ namespace sc::office::excel {
                 xml += "</cols>";
             }
             xml += "<sheetData>";
+            // The rows with cells and those with a height, in order.
+            std::map<std::size_t, std::string> rows;
             for (const auto &row: each) {
                 std::string cells;
                 for (const auto &cell: row)
                     if (!cell.empty() || !cell.style.empty()) cells += cell_xml(cell, styles);
-                if (!cells.empty()) xml += R"(<row r=")" + std::to_string(row.index() + 1) + R"(">)" + cells + "</row>";
+                if (!cells.empty()) rows[row.index()] = std::move(cells);
             }
-            return xml + "</sheetData></worksheet>";
+            for (const auto &[index, height]: each.heights()) rows.try_emplace(index);
+            for (const auto &[index, cells]: rows) {
+                xml += R"(<row r=")" + std::to_string(index + 1) + '"';
+                if (const auto height = each.height(index)) xml += R"( ht=")" + number_text(height->points()) + R"(" customHeight="1")";
+                xml += cells.empty() ? "/>" : ">" + cells + "</row>";
+            }
+            xml += "</sheetData>";
+            if (!each.merged().empty()) {
+                xml += R"(<mergeCells count=")" + std::to_string(each.merged().size()) + R"(">)";
+                for (const auto &cells: each.merged()) xml += R"(<mergeCell ref=")" + cells.name() + R"("/>)";
+                xml += "</mergeCells>";
+            }
+            return xml + "</worksheet>";
         }
     }
 

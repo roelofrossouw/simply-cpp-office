@@ -117,8 +117,11 @@ namespace {
     <col min="5" max="16384" width="9.140625" style="1"/>
   </cols>
   <sheetData>
-    <row r="1"><c r="A1" s="1" t="inlineStr"><is><t>Header</t></is></c><c r="B1" s="2"><v>1</v></c><c r="C1" s="3"/><c r="D1" s="4"/><c r="E1" s="9"><v>2</v></c><c r="F1" s="5"/><c r="G1" s="6"><v>3</v></c><c r="H1" s="7"><v>1234.5</v></c><c r="I1" s="8"><v>0.25</v></c></row>
+    <row r="1" ht="30.75" customHeight="1"><c r="A1" s="1" t="inlineStr"><is><t>Header</t></is></c><c r="B1" s="2"><v>1</v></c><c r="C1" s="3"/><c r="D1" s="4"/><c r="E1" s="9"><v>2</v></c><c r="F1" s="5"/><c r="G1" s="6"><v>3</v></c><c r="H1" s="7"><v>1234.5</v></c><c r="I1" s="8"><v>0.25</v></c></row>
+    <row r="2" ht="18" spans="1:3"/>
+    <row r="3" ht="0" customHeight="1" hidden="1"/>
   </sheetData>
+  <mergeCells count="3"><mergeCell ref="A1:C1"/><mergeCell ref="B1:B2"/><mergeCell ref="E5:F6"/></mergeCells>
 </worksheet>)";
 
     bool is_empty(const value &v) { return std::holds_alternative<std::monostate>(v); }
@@ -431,6 +434,56 @@ int main() {
         CHECK_THROWS_AS((void) sc::office::excel::bytes(book), std::invalid_argument);
     }
 
+    SECTION("Ranges, merged cells and row heights");
+    {
+        using sc::office::excel::range;
+        CHECK(range{"A1:D3"}.first == address{"A1"} && range{"A1:D3"}.last == address{"D3"});
+        CHECK(range{"D3:A1"} == range{"A1:D3"});
+        CHECK(range(address{"D1"}, address{"A3"}) == range{"A1:D3"}); // any two opposite corners
+        CHECK_EQ(range{"b2"}.name(), std::string{"B2"});
+        CHECK_EQ(range{"A1:D3"}.name(), std::string{"A1:D3"});
+        CHECK_EQ(range{"A1:D3"}.size(), std::size_t{12});
+        CHECK(range{"A1:D3"}.contains("C2") && !range{"A1:D3"}.contains("E2"));
+        CHECK(range{"A1:B2"}.overlaps("B2:C3") && !range{"A1:B2"}.overlaps("C1:D2"));
+        for (const auto *wrong: {"", ":", "A1:", "A1:B", "A1-B2", "1A:B2"}) CHECK_THROWS_AS((void) range{wrong}, std::invalid_argument);
+
+        sc::office::excel::workbook book;
+        auto &sheet = book["Merged"];
+        sheet["A1"] = "Title across four columns";
+        sheet.merge("A1:D1");
+        sheet.merge({"B3", "C5"});
+        CHECK_THROWS_AS(sheet.merge("D1:E1"), std::invalid_argument); // overlaps A1:D1
+        CHECK_THROWS_AS(sheet.merge("F1"), std::invalid_argument);    // one cell
+        CHECK_THROWS_AS(sheet.merge(range{address{0, 0}, address{0, sc::office::excel::max_columns}}), std::out_of_range);
+        sheet.merge("F1:F2");
+        CHECK_EQ(sheet.unmerge("F1:F2"), std::size_t{1});
+        CHECK_EQ(sheet.unmerge("F1:F2"), std::size_t{0});
+        CHECK_EQ(sheet.unmerge("A1:C1"), std::size_t{0}); // only exactly a merged range
+        CHECK_EQ(sheet.merged().size(), std::size_t{2});
+
+        sheet.height(0, 30);
+        sheet.height(9, sc::dist::mm(10));                 // a row with a height and no cells
+        sheet.height(4, 20);
+        sheet.height(4, std::nullopt);
+        CHECK(!sheet.height(4));
+        CHECK_THROWS_AS(sheet.height(0, 410), std::out_of_range);
+        CHECK_THROWS_AS(sheet.height(0, -1), std::out_of_range);
+        CHECK_THROWS_AS(sheet.height(sc::office::excel::max_rows, 10), std::out_of_range);
+        CHECK(sheet.height(0) && sheet.height(0)->points() == 30);
+
+        const auto bytes = sc::office::excel::bytes(book);
+        const auto xml = sc::archive::from_memory(bytes).read("xl/worksheets/sheet1.xml");
+        CHECK(xml.find(R"(<row r="1" ht="30" customHeight="1"><c r="A1")") != std::string::npos);
+        CHECK(xml.find(R"(<row r="10" ht=")") != std::string::npos);
+        CHECK(xml.find(R"(<mergeCells count="2"><mergeCell ref="A1:D1"/><mergeCell ref="B3:C5"/></mergeCells>)") != std::string::npos);
+        const auto back = sc::office::excel::read_from(bytes);
+        const auto &got = back["Merged"];
+        CHECK(got.merged() == sheet.merged());
+        CHECK_EQ(got.heights().size(), std::size_t{2});
+        CHECK(got.height(9) && std::abs(got.height(9)->millimetres() - 10) < 1e-9);
+        CHECK(text(got, "A1") == "Title across four columns");
+    }
+
     SECTION("Styles and column widths the way Excel writes them");
     {
         const auto file = root / "styled.xlsx";
@@ -499,6 +552,13 @@ int main() {
         CHECK(sheet.width("A") == 20.7109375);
         CHECK(sheet.width("D") == 9.140625);
         CHECK(!sheet.width("E"));
+        // Heights set by hand (customHeight), a hidden row's 0; merges, one overlapping left out.
+        CHECK(sheet.height(0) && sheet.height(0)->points() == 30.75);
+        CHECK(!sheet.height(1));
+        CHECK(sheet.height(2) && sheet.height(2)->points() == 0);
+        CHECK_EQ(sheet.heights().size(), std::size_t{2});
+        CHECK_EQ(sheet.merged().size(), std::size_t{2});
+        CHECK(sheet.merged().size() == 2 && sheet.merged()[0].name() == "A1:C1" && sheet.merged()[1].name() == "E5:F6");
     }
 
     SECTION("Not a workbook, and what can't be written");
