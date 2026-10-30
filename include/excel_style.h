@@ -7,9 +7,8 @@
 #include <string>
 #include <string_view>
 
-// Excel (sc-office): how a cell looks: its font's size, colour, weight, slant, strikethrough and
-// underline, its
-// background, its borders, its alignment and its number format.
+// Excel (sc-office): how a cell looks: its font's family, size, colour, weight, slant,
+// strikethrough and underline, its background, its borders, its alignment and its number format.
 namespace sc::office::excel {
     // A font's underline, as Excel has them: the accounting ones run the cell's width.
     enum class underline { none, single, doubled, single_accounting, double_accounting };
@@ -42,6 +41,8 @@ namespace sc::office::excel {
 
     // A cell's font. What isn't set is the workbook's default (Calibri, 11 points, automatic colour).
     struct font {
+        // Its family: "Arial", "Courier New"; empty: the workbook's (Calibri).
+        std::string name;
         // In points: 14, or sc::dist::point(14).
         std::optional<sc::distance> size;
         // sc::color{"#c00000"}, sc::color::Red ...; alpha is left out.
@@ -96,6 +97,7 @@ namespace sc::office::excel {
     //     sheet["A1"].style.font.bold = true;
     //     sheet["A1"].style.background = sc::color{"#ffff00"};
     //     sheet["A1"].style.borders.bottom = {excel::line::doubled, sc::color{"#1f4e79"}};
+    //     sheet["A1"].style.font.name = "Arial";
     //     sheet["B1"].style = {.font = {.size = 14, .color = sc::color{"#1f4e79"}, .bold = true},
     //                          .background = sc::color{"#ddebf7"},
     //                          .borders = excel::borders::all({excel::line::thin}),

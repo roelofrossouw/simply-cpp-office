@@ -47,6 +47,7 @@ prices["B3"].formula = "=B2*2";
 prices["A1"].style = {.font = {.size = 14, .color = sc::color::White, .bold = true},
                       .background = sc::color{"#4472c4"}};
 prices["B3"].style.font.bold = true;
+prices["B3"].style.font.name = "Arial";  // empty: Calibri, the workbook's
 prices["B3"].style.borders.top = {sc::office::excel::line::thin};
 prices["B3"].style.borders.bottom = {sc::office::excel::line::doubled, sc::color{"#1f4e79"}};
 prices["B3"].style.number_format = "#,##0.00";
@@ -57,6 +58,7 @@ prices.merge("A5:B5");                   // shown as one cell, A5
 prices.hidden_column("C", true);         // a hidden column
 prices.hidden_row(9, true);              // a hidden row (row 10)
 prices.freeze("A2");                     // row 1 stays in view as the rest scrolls
+prices.filter("A1:B9");                  // AutoFilter buttons on row 1, for the rows under it
 sc::office::excel::write(out, "out.xlsx");
 ```
 
@@ -67,7 +69,7 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
   (`std::monostate`), a number (`double`), text (`std::string`, UTF-8) or `bool`. Dates are
   numbers, days since 1899-12-30 as Excel keeps them; an error such as `#DIV/0!` reads as its
   text. `cell = value` sets the value; `name()` gives `"B3"`. Its `style` (`excel::style`) is how
-  it looks: `font.size` (an `sc::distance`, so a plain number is points), `font.color` and
+  it looks: `font.name` (its family, `"Arial"`; empty is Calibri, the workbook's), `font.size` (an `sc::distance`, so a plain number is points), `font.color` and
   `background` (`sc::color`, a solid fill; alpha is left out), `font.bold`, `font.italic`, `font.strike`,
   `font.underline` (`excel::underline`: `single`, `doubled`, `single_accounting`,
   `double_accounting`), and `borders`: `left`, `right`, `top` and `bottom`, each an `excel::edge`
@@ -105,7 +107,9 @@ Workbooks, sheets and rows work like the standard containers (and nlohmann::json
   with no cells is kept). `freeze(address)` freezes the
   rows above that cell and the columns left of it, as Excel's Freeze Panes does there
   (`freeze("B2")` keeps row 1 and column A in view; `freeze("A1")` freezes nothing);
-  `unfreeze()`, and `frozen()` gives the cell, or none.
+  `unfreeze()`, and `frozen()` gives the cell, or none. `filter(range)` gives a range Excel's
+  AutoFilter, drop-down buttons on its first row to filter and sort the rows under it (one a
+  sheet; `filter(std::nullopt)` takes it away), and `filtered()` gives the range, or none.
 - **Ranges** (`excel::range`): `"A1:D3"`, or two opposite corners (`{"D3", "A1"}` is A1:D3);
   `first` and `last` (top left, bottom right), `name()`, `contains(address)`, `overlaps(range)`,
   `size()`.

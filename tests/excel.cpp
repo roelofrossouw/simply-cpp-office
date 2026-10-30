@@ -380,6 +380,9 @@ int main() {
         sheet["G3"] = "Stacked";
         sheet["G3"].style.alignment.stacked = true;
         sheet["G3"].style.borders.diagonal_up = sheet["G3"].style.borders.diagonal_down = {line::thin}; // a cross
+        sheet["H3"] = "Arial";
+        sheet["H3"].style.font.name = "Arial";
+        sheet["H3"].style.font.size = 10;
         sheet.width("A", 30);
         sheet.width(1, 12.5);
         sheet.width("C", 12.5);                         // B and C: one <col>
@@ -398,7 +401,8 @@ int main() {
         const auto bytes = sc::office::excel::bytes(book);
         const auto archive = sc::archive::from_memory(bytes);
         const auto styles_xml = archive.read("xl/styles.xml");
-        CHECK(styles_xml.find(R"(<cellXfs count="13">)") != std::string::npos); // plain, A1 and A2, B1, C1, D2, E2, A3, B3, C3, D3, E3, F3, G3
+        CHECK(styles_xml.find(R"(<cellXfs count="14">)") != std::string::npos); // plain, A1 and A2, B1, C1, D2, E2, A3, B3, C3, D3, E3, F3, G3, H3
+        CHECK(styles_xml.find(R"(<sz val="10"/><name val="Arial"/></font>)") != std::string::npos);
         CHECK(styles_xml.find(R"(<alignment textRotation="45"/>)") != std::string::npos);
         CHECK(styles_xml.find(R"(<alignment textRotation="180"/>)") != std::string::npos);
         CHECK(styles_xml.find(R"(<alignment textRotation="255"/>)") != std::string::npos);
@@ -418,6 +422,8 @@ int main() {
         CHECK(header.font.bold);
         CHECK(header.font.size && header.font.size->points() == 14);
         CHECK(header.font.color && header.font.color->to_hex() == "#1f4e79");
+        CHECK(header.font.name.empty()); // Calibri, the workbook's
+        CHECK_EQ(got.at("H3").style.font.name, std::string{"Arial"});
         CHECK(header.background && header.background->to_hex() == "#ddebf7");
         CHECK(got.at("A2").style == header);
         CHECK(got.at("B1").style.font.bold && !got.at("B1").style.font.size && !got.at("B1").style.font.color);
@@ -551,6 +557,13 @@ int main() {
         book["Both"].freeze("B2");
         book["Unfrozen"].freeze("B2");
         book["Unfrozen"].unfreeze();
+        CHECK(!sheet.filtered());
+        sheet.filter("A1:F5");
+        book["It's filtered"].filter("B2:C9");
+        book["It's filtered"].filter(std::nullopt);
+        CHECK(!book["It's filtered"].filtered());
+        book["It's filtered"].filter("B2:C9");
+        CHECK_THROWS_AS(sheet.filter(sc::office::excel::range{address{0, 0}, address{sc::office::excel::max_rows, 0}}), std::out_of_range);
 
         const auto bytes = sc::office::excel::bytes(book);
         const auto archive = sc::archive::from_memory(bytes);
@@ -563,6 +576,10 @@ int main() {
         CHECK(archive.read("xl/worksheets/sheet2.xml").find(R"(<pane xSplit="2" topLeftCell="C1" activePane="topRight" state="frozen"/>)") != std::string::npos);
         CHECK(archive.read("xl/worksheets/sheet3.xml").find(R"(activePane="bottomRight")") != std::string::npos);
         CHECK(archive.read("xl/worksheets/sheet4.xml").find("sheetViews") == std::string::npos);
+        CHECK(xml.find(R"(</sheetData><autoFilter ref="A1:F5"/>)") != std::string::npos);
+        const auto workbook_xml = archive.read("xl/workbook.xml");
+        CHECK(workbook_xml.find(R"(<definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'Frozen'!$A$1:$F$5</definedName>)") != std::string::npos);
+        CHECK(workbook_xml.find(R"(localSheetId="4" hidden="1">'It''s filtered'!$B$2:$C$9</definedName>)") != std::string::npos);
         const auto back = sc::office::excel::read_from(bytes);
         CHECK(back["Frozen"].hidden_columns() == sheet.hidden_columns());
         CHECK(back["Frozen"].hidden_rows() == sheet.hidden_rows());
@@ -573,6 +590,9 @@ int main() {
         CHECK(back["Columns"].frozen() == address{"C1"});
         CHECK(back["Both"].frozen() == address{"B2"});
         CHECK(!back["Unfrozen"].frozen());
+        CHECK(back["Frozen"].filtered() == sc::office::excel::range{"A1:F5"});
+        CHECK(back["It's filtered"].filtered() == sc::office::excel::range{"B2:C9"});
+        CHECK(!back["Both"].filtered());
     }
 
     SECTION("Styles and column widths the way Excel writes them");

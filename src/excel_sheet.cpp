@@ -90,4 +90,9 @@ namespace sc::office::excel {
         if (top_left == address{0, 0}) frozen_.reset();
         else frozen_ = top_left;
     }
+
+    void sheet::filter(const std::optional<range> &cells) {
+        if (cells && (cells->last.row >= max_rows || cells->last.column >= max_columns)) throw std::out_of_range("excel: a cell beyond XFD1048576");
+        filtered_ = cells;
+    }
 }

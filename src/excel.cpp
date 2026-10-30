@@ -308,6 +308,7 @@ namespace sc::office::excel {
             if (const auto list = root.child("fonts")) {
                 for (const auto &each: list->children("font")) {
                     font made;
+                    if (const auto name = each.child("name")) made.name = unescaped((*name)["val"]);
                     if (const auto size = each.child("sz"); size && !(*size)["val"].empty()) made.size = number((*size)["val"]);
                     if (const auto color = each.child("color")) made.color = color_of(*color, theme);
                     made.bold = on(each.child("b"));
@@ -325,6 +326,7 @@ namespace sc::office::excel {
                 for (auto &each: fonts) {
                     if (each.size && plain.size && each.size->points() == plain.size->points()) each.size.reset();
                     if (each.color == plain.color) each.color.reset();
+                    if (each.name == plain.name) each.name.clear();
                 }
             }
             std::map<unsigned, std::string> formats{builtin_formats, builtin_formats + std::size(builtin_formats)};
@@ -444,6 +446,13 @@ namespace sc::office::excel {
                         };
                         if (split("ySplit") < max_rows && split("xSplit") < max_columns) out.freeze({split("ySplit"), split("xSplit")});
                     }
+            // The AutoFilter's range; one that isn't a range is left out.
+            if (const auto filter = document.root().child("autoFilter")) {
+                try {
+                    out.filter(range{(*filter)["ref"]});
+                } catch (const std::exception &) {
+                }
+            }
             // Merged cells; one that isn't a range, or overlaps one before it, is left out.
             if (const auto merges = document.root().child("mergeCells")) {
                 for (const auto &each: merges->children("mergeCell")) {
@@ -608,7 +617,10 @@ namespace sc::office::excel {
                     else if (each.underline != underline::none) xml += R"(<u val=")" + std::string{name(each.underline)} + R"("/>)";
                     xml += R"(<sz val=")" + number_text(each.size ? each.size->points() : 11) + R"("/>)";
                     if (each.color) xml += R"(<color rgb=")" + argb(*each.color) + R"("/>)";
-                    xml += R"(<name val="Calibri"/><family val="2"/><scheme val="minor"/></font>)";
+                    // Calibri is the theme's body font; another is named on its own.
+                    if (each.name.empty() || each.name == "Calibri") xml += R"(<name val="Calibri"/><family val="2"/><scheme val="minor"/></font>)";
+                    else if (each.name.size() > 31) throw std::invalid_argument("excel: a font's name is at most 31 characters");
+                    else xml += R"(<name val=")" + xml_text(each.name) + R"("/></font>)";
                 }
                 xml += R"(</fonts><fills count=")" + std::to_string(fills.size() + 2) +
                        R"("><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>)";
@@ -728,6 +740,7 @@ namespace sc::office::excel {
                 xml += cells.empty() ? "/>" : ">" + cells + "</row>";
             }
             xml += "</sheetData>";
+            if (const auto &filtered = each.filtered()) xml += R"(<autoFilter ref=")" + filtered->name() + R"("/>)";
             if (!each.merged().empty()) {
                 xml += R"(<mergeCells count=")" + std::to_string(each.merged().size()) + R"(">)";
                 for (const auto &cells: each.merged()) xml += R"(<mergeCell ref=")" + cells.name() + R"("/>)";
@@ -782,6 +795,21 @@ namespace sc::office::excel {
             sheets += R"(<sheet name=")" + xml_text(names[i - 1]) + R"(" sheetId=")" + n + R"(" r:id="rId)" + n + R"("/>)";
             rels += R"(<Relationship Id="rId)" + n + R"(" Type=")" + std::string{relationships} + R"(/worksheet" Target="worksheets/sheet)" + n + R"(.xml"/>)";
         }
+        // Excel keeps each AutoFilter's range as a hidden name of its sheet too.
+        std::string defined;
+        std::size_t at = 0;
+        for (const auto &each: book) {
+            if (const auto &filtered = each.filtered()) {
+                std::string quoted = "'";
+                for (const char c: names[at]) quoted += c == '\'' ? std::string{"''"} : std::string{c};
+                const auto absolute = [](const address where) {
+                    return "$" + column_name(where.column) + "$" + std::to_string(where.row + 1);
+                };
+                defined += R"(<definedName name="_xlnm._FilterDatabase" localSheetId=")" + std::to_string(at) + R"(" hidden="1">)" +
+                           xml_text(quoted + "'!" + absolute(filtered->first) + ":" + absolute(filtered->last)) + "</definedName>";
+            }
+            ++at;
+        }
         const auto styles_id = "rId" + std::to_string(book.size() + 1);
         types += R"(<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>)";
         rels += R"(<Relationship Id=")" + styles_id + R"(" Type=")" + std::string{relationships} + R"(/styles" Target="styles.xml"/>)";
@@ -793,6 +821,7 @@ namespace sc::office::excel {
         parts.emplace_back("xl/workbook.xml", std::string{xml_declaration} +
                                                   R"(<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r=")" +
                                                   std::string{relationships} + R"("><sheets>)" + sheets + "</sheets>" +
+                                                  (defined.empty() ? "" : "<definedNames>" + defined + "</definedNames>") +
                                                   (formulas ? R"(<calcPr fullCalcOnLoad="1"/>)" : "") + "</workbook>");
         parts.emplace_back("xl/_rels/workbook.xml.rels", rels + "</Relationships>");
         parts.emplace_back("xl/styles.xml", styles.xml());

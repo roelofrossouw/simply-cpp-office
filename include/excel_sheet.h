@@ -16,7 +16,8 @@
 #include <utility>
 
 // Excel (sc-office): a sheet, holding the rows that have cells, its columns' widths, its rows'
-// heights, which columns and rows are hidden, its merged cells and its frozen panes.
+// heights, which columns and rows are hidden, its merged cells, its frozen panes and its
+// AutoFilter.
 namespace sc::office::excel {
     // A sheet: the rows that have cells, in order.
     class sheet {
@@ -93,6 +94,13 @@ namespace sc::office::excel {
         // The cell the panes are frozen at; none when they aren't.
         [[nodiscard]] const std::optional<address> &frozen() const { return frozen_; }
 
+        // Gives a range Excel's AutoFilter: drop-down buttons on its first row, to filter and sort
+        // the rows under it: filter("A1:F20"). std::nullopt takes it away. A sheet has one at most.
+        // Throws std::out_of_range beyond XFD1048576.
+        void filter(const std::optional<range> &cells);
+        // The range with the AutoFilter; none when there's none.
+        [[nodiscard]] const std::optional<range> &filtered() const { return filtered_; }
+
         [[nodiscard]] auto begin() { return detail::values_iterator{rows_.begin()}; }
         [[nodiscard]] auto end() { return detail::values_iterator{rows_.end()}; }
         [[nodiscard]] auto begin() const { return detail::values_iterator{rows_.cbegin()}; }
@@ -110,5 +118,6 @@ namespace sc::office::excel {
         std::set<std::size_t> hidden_columns_;
         std::set<std::size_t> hidden_rows_;
         std::optional<address> frozen_;
+        std::optional<range> filtered_;
     };
 }
