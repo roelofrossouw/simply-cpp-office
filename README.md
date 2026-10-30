@@ -1,7 +1,8 @@
 # simply-cpp-office
 
 `sc-office` reads Office documents: the pictures in a Word document (`.docx`),
-and an Excel workbook's cells (`.xlsx`), which it writes too. Office files are
+and an Excel workbook's cells (`.xlsx`), which it writes too, as it reads and
+writes CSV files with the same access to their values. Office files are
 ZIP archives of XML (Office Open XML), read and written with sc-archive and
 sc-web.
 
@@ -134,6 +135,50 @@ Not covered yet: fonts other than Calibri, split (unfrozen) panes, pictures and 
 **TODO:** pictures in `.xlsx` and `.pptx`. The old binary `.doc` and `.xls` formats aren't
 planned.
 
+## CSV
+
+`csv.h` reads and writes CSV files (RFC 4180) as a sheet of values with the same
+access as an Excel sheet, so code that only uses data works on both: cells by
+name (`"B3"`) or place (`{2, 1}`), `at()`, `contains()`, `operator[]` adding a
+cell as `std::map` does, `erase()`, and rows and cells in order. The values are
+Excel's (`std::monostate`, `double`, `std::string`, `bool`); there are no styles,
+widths or formulas.
+
+```cpp
+#include <csv.h>
+
+const auto prices = sc::office::csv::read("prices.csv");   // , or ; found by itself
+for (const auto &row: prices)
+    for (const auto &cell: row)
+        cell.row, cell.column, cell.value;                  // 3, 4, 12.5
+if (prices.contains("B2")) total = std::get<double>(prices.at("B2").value);
+
+sc::office::csv::sheet out;
+out["A1"] = "Item";
+out[{1, 1}] = 12.5;                                         // B2
+sc::office::csv::write(out, "out.csv");                     // or bytes(out)
+
+sc::office::csv::write(book["Prices"], "prices.csv");       // an Excel sheet's values
+const auto xlsx_sheet = prices.to_excel();                  // and the other way
+```
+
+- **Quoting**: a field with the delimiter, a quote or a line break is quoted and a
+  quote in it doubled (`"He said ""hi"""`); a quoted field may hold line breaks.
+  Lines end in CRLF, LF or CR when read, and CRLF when written. A UTF-8 byte order
+  mark is skipped when reading, and written with `.byte_order_mark = true`
+  (Excel needs it to read UTF-8 text as such).
+- **The delimiter**: `{.delimiter = ';'}` gives one; by default it's found: a comma,
+  unless the file reads more evenly with semicolons (as Excel writes CSV where
+  the decimal separator is a comma). `find_delimiter(text)` says which.
+- **Values**: plain numbers (`12.5`, `-3`, `1e6`, but not `007`, `+1` or `.5`) read
+  as numbers and TRUE or FALSE (any case) as true/false, as Excel reads them; a
+  quoted field stays text. `{.typed = false}` reads every field as text. Writing
+  quotes text that would read back as a number or TRUE/FALSE, so it stays text.
+- **Empty fields** are cells that aren't set, so rows keep their places; a sheet is
+  written from A1 to its last row and column.
+- `read(file)` names the sheet after the file (`prices`); a quoted field that isn't
+  closed throws `std::runtime_error`.
+
 ## Demos
 
 `sc-office-word-demo FILE [--save FOLDER]` lists a `.docx`'s pictures in order,
@@ -174,4 +219,6 @@ for (const auto &sheet: sc::office::excel::read(file)) {
 
 Run `bash scripts/install.sh` to configure, build, test, package and install.
 The tests build their own `.docx` and `.xlsx` files (with sc-archive) and need
-nothing else; the Excel one also writes workbooks and reads them back.
+nothing else; the Excel one also writes workbooks and reads them back, and the
+CSV one checks its quoting, delimiters and values, and the same code on a CSV
+sheet and an Excel sheet.

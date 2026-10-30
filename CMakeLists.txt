@@ -13,7 +13,7 @@ find_or_install_package(sc-core simply-cpp-dev simply-cpp 1.20.0)
 find_or_install_package(sc-archive simply-cpp-archive-dev simply-cpp-archive 1.0.0)
 find_or_install_package(sc-web simply-cpp-web-dev simply-cpp-web 1.4.7)
 
-set(SOURCE_OBJECTS include/office.h include/excel_cell.h include/excel_iterator.h include/excel_style.h)
+set(SOURCE_OBJECTS include/office.h include/excel_cell.h include/excel_iterator.h include/excel_style.h include/csv_cell.h include/csv_row.h)
 set(SOURCE_LIBRARIES)
 set(SOURCE_LINK_LIBRARIES)
 
@@ -28,6 +28,9 @@ add_sc_object(excel_row)
 add_sc_object(excel_sheet)
 add_sc_object(excel_workbook SOURCES src/excel_sheet_names.h LINK_LIBRARIES sc::sc-core)
 add_sc_object(excel SOURCES src/excel_sheet_names.h LINK_LIBRARIES sc::sc-core sc::sc-archive sc::sc-web)
+# CSV: a sheet of values with the same access as Excel's, then reading and writing it.
+add_sc_object(csv_sheet)
+add_sc_object(csv)
 
 add_sc_libraries(DESCRIPTION "simply-cpp Office documents")
 target_compile_features(sc-office PUBLIC cxx_std_20)
