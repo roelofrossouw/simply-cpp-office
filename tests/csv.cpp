@@ -109,6 +109,21 @@ int main() {
             for (const auto &cell: row) CHECK(back.at({cell.row, cell.column}).value == cell.value);
         CHECK_EQ(bytes(out, {.delimiter = ';'}).substr(0, 15), std::string{"Item;Price;;\r\nB"});
         CHECK(bytes(out, {.byte_order_mark = true}).starts_with("\xEF\xBB\xBF" "Item"));
+        // Numbers as other programs read them: no exponent for whole or everyday numbers
+        sheet numbers;
+        numbers["A1"] = 1e6;
+        numbers["B1"] = 123456789012.0;
+        numbers["C1"] = -2500000.0;
+        numbers["D1"] = 0.000125;
+        numbers["E1"] = 1234567.5;
+        numbers["F1"] = 0.1;
+        numbers["G1"] = 1e25;
+        numbers["H1"] = 1e-9;
+        numbers["I1"] = 0.0;
+        CHECK_EQ(bytes(numbers), std::string{"1000000,123456789012,-2500000,0.000125,1234567.5,0.1,1e+25,1e-09,0\r\n"});
+        const auto read_numbers = read_from(bytes(numbers));
+        for (const auto &row: numbers)
+            for (const auto &cell: row) CHECK(read_numbers.at({cell.row, cell.column}).value == cell.value);
         sheet bad;
         bad["A1"] = std::numeric_limits<double>::infinity();
         CHECK_THROWS_AS((void) bytes(bad), std::invalid_argument);

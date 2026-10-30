@@ -114,10 +114,15 @@ namespace sc::office::csv {
             return std::move(item.text);
         }
 
+        // A number as people and other programs read it: whole numbers as integers (1000000, not 1e+06),
+        // others in decimal notation, the fewest digits that read back the same; only the very large or
+        // very small with an exponent
         std::string number_text(const double number) {
             if (!std::isfinite(number)) throw std::invalid_argument("csv: a number that isn't finite");
-            char text[32];
-            const auto [end, error] = std::to_chars(text, text + sizeof text, number);
+            char text[64];
+            const double size = std::fabs(number);
+            const auto format = size == 0 || (size >= 1e-6 && size < 1e21) ? std::chars_format::fixed : std::chars_format::general;
+            const auto [end, error] = std::to_chars(text, text + sizeof text, number, format);
             return {text, end};
         }
 
