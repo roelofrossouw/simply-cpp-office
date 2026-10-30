@@ -137,15 +137,15 @@ planned.
 
 ## CSV
 
-`csv.h` reads and writes CSV files (RFC 4180) as a sheet of values with the same
-access as an Excel sheet, so code that only uses data works on both: cells by
-name (`"B3"`) or place (`{2, 1}`), `at()`, `contains()`, `operator[]` adding a
-cell as `std::map` does, `erase()`, and rows and cells in order. The values are
-Excel's (`std::monostate`, `double`, `std::string`, `bool`); there are no styles,
-widths or formulas.
+`sc_csv.h` (not csv.h: libcsv-dev ships one) reads and writes CSV files (RFC
+4180) as a sheet of values with the same access as an Excel sheet, so code that
+only uses data works on both: cells by name (`"B3"`) or place (`{2, 1}`),
+`at()`, `contains()`, `operator[]` adding a cell as `std::map` does, `erase()`,
+and rows and cells in order. The values are Excel's (`std::monostate`, `double`,
+`std::string`, `bool`); there are no styles, widths or formulas.
 
 ```cpp
-#include <csv.h>
+#include <sc_csv.h>
 
 const auto prices = sc::office::csv::read("prices.csv");   // , or ; found by itself
 for (const auto &row: prices)
