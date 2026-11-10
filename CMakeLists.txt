@@ -17,7 +17,7 @@ set(SOURCE_OBJECTS include/office.h include/excel_cell.h include/excel_iterator.
 set(SOURCE_LIBRARIES)
 set(SOURCE_LINK_LIBRARIES)
 
-add_sc_object(office
+add_sc_object(office SOURCES src/word_text.cpp # word::text() beside word::images()
         LINK_LIBRARIES sc::sc-core sc::sc-archive sc::sc-web
         PUBLIC_LINK_LIBRARIES sc::sc-core sc::sc-archive sc::sc-web)
 # Excel: its cells, sheets and workbooks, then reading and writing them.

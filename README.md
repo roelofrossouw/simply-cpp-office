@@ -1,6 +1,6 @@
 # simply-cpp-office
 
-`sc-office` reads Office documents: the pictures in a Word document (`.docx`),
+`sc-office` reads Office documents: the text and pictures of a Word document (`.docx`),
 and an Excel workbook's cells (`.xlsx`), which it writes too, as it reads and
 writes CSV files with the same access to their values. Office files are
 ZIP archives of XML (Office Open XML), read and written with sc-archive and
@@ -23,6 +23,25 @@ they appear, each once (DrawingML pictures and the older VML ones), then any
 others the document holds: those in headers and footers, or not placed. Linked
 pictures (outside the file) aren't included. `word::images_in(bytes)` reads a
 `.docx` held in memory. A file that isn't a `.docx` throws `std::runtime_error`.
+
+`word::text()` gives a Word document's text as a reader would take it, a person or a language
+model that can't open a `.docx`. Each paragraph is a line, with its list number written in front
+as Word shows it, so clause numbers from Word's numbering appear in the text ("4.1.2 the
+Purchaser ..."). The numbers come from `numbering.xml`: its levels, formats (decimal, letters,
+roman numerals, decimalZero, legal numbering) and start overrides. The numbering may be set on the
+paragraph or through its style and the styles it's based on; a style without a level takes the
+list level linked to it. Lists count per abstract number, a level restarts the levels below it, and
+bullets get no number. Tabs are written as `\t` and line breaks as `\n`. A table is a row per line,
+its cells separated by `" | "`. Content controls and text boxes are read as part of the text.
+Deleted text (tracked changes), field codes and the copies kept for older readers
+(`mc:Fallback`) are left out. At most one blank line separates paragraphs. `{.headers_footers = true,
+.notes = true}` adds the headers', footers' and notes' text after the body. `word::text_in(bytes)`
+reads a `.docx` held in memory; an old binary `.doc` throws `std::runtime_error`.
+
+```cpp
+const auto text = sc::office::word::text("agreement.docx");
+// "4. CONDITIONS PRECEDENT\n4.1 The sale is subject to ...\n4.1.1 the Purchaser, no later than ..."
+```
 
 ## Excel
 
@@ -185,12 +204,18 @@ const auto xlsx_sheet = prices.to_excel();                  // and the other way
 
 ## Demos
 
-`sc-office-word-demo FILE [--save FOLDER]` lists a `.docx`'s pictures in order,
-or writes them into a folder as they're stored.
+`sc-office-word-demo FILE [--headers] [--notes]` prints a `.docx`'s text (above);
+`--pictures [--save FOLDER]` lists its pictures in order instead, or writes them into a folder as
+they're stored.
 
 <!-- sc-example: examples/sc-office-word-demo.cpp -->
 ```cpp
-const auto pictures = sc::office::word::images(args.as<std::string>("file"));
+const std::string file = args.as<std::string>("file");
+if (!args.as<bool>("pictures")) {
+    std::cout << sc::office::word::text(file, {.headers_footers = args.as<bool>("headers"), .notes = args.as<bool>("notes")}) << '\n';
+    return 0;
+}
+const auto pictures = sc::office::word::images(file);
 const std::filesystem::path folder = args.as<std::string>("save");
 if (!folder.empty()) std::filesystem::create_directories(folder);
 for (const auto &picture: pictures) {
