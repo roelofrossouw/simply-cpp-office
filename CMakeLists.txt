@@ -8,10 +8,10 @@ option(SC_OFFICE_BUILD_TESTS "Build simply-cpp-office tests" ${PROJECT_IS_TOP_LE
 get_sc_version()
 message(STATUS "SimplyCPP ${SC_MODULE} Version: ${SC_VERSION}")
 
-find_or_install_package(sc-core simply-cpp-dev simply-cpp 2.2.0)
+find_or_install_package(sc-core simply-cpp-dev simply-cpp 3.0.0)
 # Office files are ZIP archives of XML: sc-archive opens and writes them, sc-web reads the XML.
-find_or_install_package(sc-archive simply-cpp-archive-dev simply-cpp-archive 1.1.0)
-find_or_install_package(sc-web simply-cpp-web-dev simply-cpp-web 1.6.0)
+find_or_install_package(sc-archive simply-cpp-archive-dev simply-cpp-archive 2.0.0)
+find_or_install_package(sc-web simply-cpp-web-dev simply-cpp-web 2.0.0)
 
 set(SOURCE_OBJECTS include/sc/office/office.h include/sc/office/excel_cell.h include/sc/office/excel_iterator.h include/sc/office/excel_style.h include/sc/office/csv_cell.h include/sc/office/csv_row.h)
 set(SOURCE_LIBRARIES)
@@ -49,4 +49,4 @@ endif ()
 add_sc_example(sc-office-word-demo)
 add_sc_example(sc-office-excel-demo)
 
-package_sc_module(DEV_DEPENDS "simply-cpp-dev (>= 1.20.0~)" "simply-cpp-archive-dev (>= 1.1.0~)" "simply-cpp-web-dev (>= 1.6.0~)")
+package_sc_module(DEV_DEPENDS "simply-cpp-dev (>= 3.0.0~)" "simply-cpp-archive-dev (>= 2.0.0~)" "simply-cpp-web-dev (>= 2.0.0~)")
