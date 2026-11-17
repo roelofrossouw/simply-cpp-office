@@ -8,8 +8,8 @@
 //     sc-office-excel-demo prices.xlsx
 //     sc-office-excel-demo --write sample.xlsx
 
-#include <excel.h>
-#include <params.h>
+#include <sc/office/excel.h>
+#include <sc/core/params.h>
 
 #include <iostream>
 #include <sstream>

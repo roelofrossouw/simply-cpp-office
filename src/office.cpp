@@ -1,8 +1,8 @@
-#include "office.h"
+#include <sc/office/office.h>
 
-#include <sc_archive.h>
-#include <core.h>
-#include <xml.h>
+#include <sc/archive/sc_archive.h>
+#include <sc/core/core.h>
+#include <sc/web/xml.h>
 
 #include <algorithm>
 #include <map>

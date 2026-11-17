@@ -2,7 +2,7 @@
 
 // Sheet names as Excel takes them: for workbook::add() and write(). Not installed.
 
-#include <core.h>
+#include <sc/core/core.h>
 
 #include <stdexcept>
 #include <string>

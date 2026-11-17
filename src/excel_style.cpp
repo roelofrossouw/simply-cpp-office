@@ -1,4 +1,4 @@
-#include "excel_style.h"
+#include <sc/office/excel_style.h>
 
 #include <array>
 #include <stdexcept>

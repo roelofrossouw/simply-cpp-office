@@ -1,7 +1,7 @@
 #pragma once
 
-#include <color.h>
-#include <distance.h>
+#include <sc/core/color.h>
+#include <sc/core/distance.h>
 
 #include <optional>
 #include <string>

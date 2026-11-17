@@ -1,9 +1,9 @@
 // A Word document's text (word::text): paragraphs as lines, list numbers as Word shows them, tables
 // as rows of cells. The XML is matched by local name: documents differ in their prefixes.
-#include "office.h"
+#include <sc/office/office.h>
 
-#include <sc_archive.h>
-#include <xml.h>
+#include <sc/archive/sc_archive.h>
+#include <sc/web/xml.h>
 
 #include <map>
 #include <optional>

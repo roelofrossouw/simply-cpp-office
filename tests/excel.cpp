@@ -1,7 +1,7 @@
 // Cell names, sheets and workbooks; a workbook written and read back; an .xlsx built here the way
 // Excel writes one (shared strings, rich text, formulas, errors, a relationship's absolute target).
-#include <sc_archive.h>
-#include <excel.h>
+#include <sc/archive/sc_archive.h>
+#include <sc/office/excel.h>
 #include <sc_test.h>
 
 #include <algorithm>

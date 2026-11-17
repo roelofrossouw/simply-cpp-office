@@ -9,7 +9,7 @@ sc-web.
 **Documentation:** the [simply-cpp wiki](https://github.com/roelofrossouw/simply-cpp/wiki) has an [Office guide](https://github.com/roelofrossouw/simply-cpp/wiki/Office) and the [sc-office reference](https://github.com/roelofrossouw/simply-cpp/wiki/Reference-sc-office).
 
 ```cpp
-#include <office.h>
+#include <sc/office/office.h>
 
 for (const auto &picture: sc::office::word::images("statement.docx")) {
     if (!picture.raster()) continue;     // EMF, WMF, SVG: drawings, not images
@@ -46,7 +46,7 @@ const auto text = sc::office::word::text("agreement.docx");
 ## Excel
 
 ```cpp
-#include <excel.h>                       // or office.h, which includes it
+#include <sc/office/excel.h>                       // or office.h, which includes it
 
 // Reading: the sheets in order, the rows that have cells, the cells that are set.
 const auto book = sc::office::excel::read("prices.xlsx");
@@ -168,7 +168,7 @@ and rows and cells in order. The values are Excel's (`std::monostate`, `double`,
 `std::string`, `bool`); there are no styles, widths or formulas.
 
 ```cpp
-#include <sc_csv.h>
+#include <sc/office/sc_csv.h>
 
 const auto prices = sc::office::csv::read("prices.csv");   // , or ; found by itself
 for (const auto &row: prices)

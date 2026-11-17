@@ -5,8 +5,8 @@
 //     sc-office-word-demo agreement.docx --headers --notes
 //     sc-office-word-demo statement.docx --pictures --save pictures
 
-#include <office.h>
-#include <params.h>
+#include <sc/office/office.h>
+#include <sc/core/params.h>
 
 #include <filesystem>
 #include <fstream>

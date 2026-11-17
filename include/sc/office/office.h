@@ -1,6 +1,6 @@
 #pragma once
 
-#include "excel.h"
+#include <sc/office/excel.h>
 
 #include <filesystem>
 #include <string>

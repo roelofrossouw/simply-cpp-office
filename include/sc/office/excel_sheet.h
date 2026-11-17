@@ -1,10 +1,10 @@
 #pragma once
 
-#include "excel_address.h"
-#include "excel_range.h"
-#include "excel_row.h"
+#include <sc/office/excel_address.h>
+#include <sc/office/excel_range.h>
+#include <sc/office/excel_row.h>
 
-#include <distance.h>
+#include <sc/core/distance.h>
 
 #include <cstddef>
 #include <map>
