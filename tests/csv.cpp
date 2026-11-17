@@ -1,7 +1,7 @@
 // CSV: quoting (RFC 4180), line breaks in fields, delimiters found or given, typed values, empty
 // fields, line ends and byte order marks, written and read back, and the same code working on a
 // CSV sheet and an Excel sheet.
-#include <sc/office/sc_csv.h>
+#include <sc/office/csv.h>
 #include <sc/office/excel.h>
 #include <sc_test.h>
 

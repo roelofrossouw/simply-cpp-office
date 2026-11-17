@@ -138,7 +138,7 @@ int main() {
 
     SECTION("From memory: the same");
     {
-        const auto pictures = sc::office::word::images_in(slurp(docx));
+        const auto pictures = sc::office::word::images_from(slurp(docx));
         CHECK_EQ(pictures.size(), std::size_t{4});
         CHECK_EQ(pictures[1].bytes, string{"JPEG bytes"});
     }
@@ -187,7 +187,7 @@ int main() {
                                                                      // paragraph inside the outer one: a blank line after)
                                 "Bob Seller";                        // a content control's text
         CHECK_EQ(text, expected);
-        CHECK_EQ(sc::office::word::text_in(slurp(words)), expected);
+        CHECK_EQ(sc::office::word::text_from(slurp(words)), expected);
     }
 
     SECTION("Text: headers and footers, notes, when asked for");

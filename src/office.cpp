@@ -75,7 +75,7 @@ namespace sc::office {
         return pictures_of(archive::open(docx));
     }
 
-    std::vector<picture> word::images_in(std::string docx) {
+    std::vector<picture> word::images_from(std::string docx) {
         return pictures_of(archive::from_memory(std::move(docx)));
     }
 }

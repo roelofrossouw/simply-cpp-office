@@ -21,7 +21,7 @@ for (const auto &picture: sc::office::word::images("statement.docx")) {
 `word::images()` gives the pictures in the document's text first, in the order
 they appear, each once (DrawingML pictures and the older VML ones), then any
 others the document holds: those in headers and footers, or not placed. Linked
-pictures (outside the file) aren't included. `word::images_in(bytes)` reads a
+pictures (outside the file) aren't included. `word::images_from(bytes)` reads a
 `.docx` held in memory. A file that isn't a `.docx` throws `std::runtime_error`.
 
 `word::text()` gives a Word document's text as a reader would take it, a person or a language
@@ -35,7 +35,7 @@ bullets get no number. Tabs are written as `\t` and line breaks as `\n`. A table
 its cells separated by `" | "`. Content controls and text boxes are read as part of the text.
 Deleted text (tracked changes), field codes and the copies kept for older readers
 (`mc:Fallback`) are left out. At most one blank line separates paragraphs. `{.headers_footers = true,
-.notes = true}` adds the headers', footers' and notes' text after the body. `word::text_in(bytes)`
+.notes = true}` adds the headers', footers' and notes' text after the body. `word::text_from(bytes)`
 reads a `.docx` held in memory; an old binary `.doc` throws `std::runtime_error`.
 
 ```cpp
@@ -160,7 +160,7 @@ planned.
 
 ## CSV
 
-`sc_csv.h` (not csv.h: libcsv-dev ships one) reads and writes CSV files (RFC
+`csv.h` reads and writes CSV files (RFC
 4180) as a sheet of values with the same access as an Excel sheet, so code that
 only uses data works on both: cells by name (`"B3"`) or place (`{2, 1}`),
 `at()`, `contains()`, `operator[]` adding a cell as `std::map` does, `erase()`,
@@ -168,7 +168,7 @@ and rows and cells in order. The values are Excel's (`std::monostate`, `double`,
 `std::string`, `bool`); there are no styles, widths or formulas.
 
 ```cpp
-#include <sc/office/sc_csv.h>
+#include <sc/office/csv.h>
 
 const auto prices = sc::office::csv::read("prices.csv");   // , or ; found by itself
 for (const auto &row: prices)

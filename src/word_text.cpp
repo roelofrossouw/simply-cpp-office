@@ -318,7 +318,7 @@ namespace sc::office {
         return text_of(archive::open(docx), options);
     }
 
-    std::string word::text_in(std::string docx, const text_options &options) {
+    std::string word::text_from(std::string docx, const text_options &options) {
         return text_of(archive::from_memory(std::move(docx)), options);
     }
 }

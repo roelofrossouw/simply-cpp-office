@@ -45,7 +45,7 @@ namespace sc::office {
         // paragraphs. Throws std::runtime_error for a file that isn't a .docx (an old .doc too).
         std::string text(const std::filesystem::path &docx, const text_options &options = {});
         // The same, for a .docx held in memory.
-        std::string text_in(std::string docx, const text_options &options = {});
+        std::string text_from(std::string docx, const text_options &options = {});
 
         // The pictures in a Word document: those in its text first, in the order they appear (each
         // once), then any others it holds (in headers and footers, or not placed). Throws
@@ -53,6 +53,6 @@ namespace sc::office {
         // word/document.xml).
         std::vector<picture> images(const std::filesystem::path &docx);
         // The same, for a .docx held in memory.
-        std::vector<picture> images_in(std::string docx);
+        std::vector<picture> images_from(std::string docx);
     }
 }
