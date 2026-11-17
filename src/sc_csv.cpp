@@ -1,5 +1,7 @@
 #include <sc/office/sc_csv.h>
 
+#include <sc/core/core.h>
+
 #include <algorithm>
 #include <cctype>
 #include <charconv>
@@ -96,11 +98,6 @@ namespace sc::office::csv {
                 if (digits() == 0) return false;
             }
             return i == text.size();
-        }
-
-        std::string lowercase(std::string text) {
-            std::ranges::transform(text, text.begin(), [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            return text;
         }
 
         value typed_value(field item, const bool typed) {
