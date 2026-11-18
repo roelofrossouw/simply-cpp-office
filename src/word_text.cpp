@@ -2,7 +2,7 @@
 // as rows of cells. The XML is matched by local name: documents differ in their prefixes.
 #include <sc/office/office.h>
 
-#include <sc/archive/sc_archive.h>
+#include <sc/archive/archive.h>
 #include <sc/web/xml.h>
 
 #include <map>
