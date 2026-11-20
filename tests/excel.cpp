@@ -709,5 +709,57 @@ int main() {
     }
 
     fs::remove_all(root);
+    {
+        sc_test::section("an Excel 2003 XML Spreadsheet (SpreadsheetML)");
+        const std::string xml = R"(<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Worksheet ss:Name="Calendar year loss ratio">
+  <Table>
+   <Row><Cell ss:MergeAcross="2"><Data ss:Type="String">Loss Ratio Report</Data></Cell><Cell><Data ss:Type="String">after the merge</Data></Cell></Row>
+   <Row ss:Index="4"><Cell><Data ss:Type="String">2024/01-2024/12</Data></Cell><Cell><Data ss:Type="Number">1234.5</Data></Cell>
+    <Cell ss:Index="5"><Data ss:Type="DateTime">2023-04-27T12:00:00.000</Data></Cell><Cell><Data ss:Type="Boolean">1</Data></Cell>
+    <Cell ss:Formula="=RC[-1]"><Data ss:Type="Number">7</Data></Cell><Cell><Data ss:Type="String"><B>bold</B> text</Data></Cell></Row>
+  </Table>
+ </Worksheet>
+ <Worksheet ss:Name="Claim detail"><Table/></Worksheet>
+</Workbook>
+)";
+        const auto book = sc::office::excel::read_from(xml);
+        CHECK_EQ(book.size(), std::size_t{2});
+        const auto &sheet = book["Calendar year loss ratio"];
+        CHECK_EQ(std::get<std::string>(sheet.at("A1").value), std::string{"Loss Ratio Report"});
+        CHECK_EQ(std::get<std::string>(sheet.at("D1").value), std::string{"after the merge"});
+        CHECK(!sheet.contains("A2"));
+        CHECK_EQ(std::get<std::string>(sheet.at("A4").value), std::string{"2024/01-2024/12"});
+        CHECK_EQ(std::get<double>(sheet.at("B4").value), 1234.5);
+        CHECK_EQ(std::get<double>(sheet.at("E4").value), 45043.5); // 2023-04-27 noon as Excel's day number
+        CHECK_EQ(std::get<bool>(sheet.at("F4").value), true);
+        CHECK_EQ(std::get<double>(sheet.at("G4").value), 7.0);
+        CHECK(sheet.at("G4").formula.empty());
+        CHECK_EQ(std::get<std::string>(sheet.at("H4").value), std::string{"bold text"});
+        CHECK(book["Claim detail"].empty());
+
+        const auto file = std::filesystem::temp_directory_path() / "sc-office-spreadsheetml.xml";
+        { std::ofstream out{file, std::ios::binary}; out << xml; }
+        CHECK_EQ(sc::office::excel::read(file).size(), std::size_t{2});
+        std::filesystem::remove(file);
+
+        // Text a report generator didn't escape: a bare & and <
+        const auto careless = sc::office::excel::read_from(
+            R"(<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">)"
+            R"(<Worksheet ss:Name="A"><Table><Row><Cell><Data ss:Type="String">Smith & Sons &amp; Co &#233; <5000 < 3</Data></Cell></Row></Table></Worksheet></Workbook>)");
+        CHECK_EQ(std::get<std::string>(careless["A"].at("A1").value), std::string{"Smith & Sons & Co \xC3\xA9 <5000 < 3"});
+
+        bool refused = false;
+        try {
+            (void) sc::office::excel::read_from(R"(<?xml version="1.0"?><Other xmlns="urn:schemas-microsoft-com:office:spreadsheet"/>)");
+        } catch (const std::runtime_error &) {
+            refused = true;
+        }
+        CHECK(refused);
+    }
+
     TEST_SUMMARY();
 }

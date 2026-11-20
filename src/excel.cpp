@@ -750,13 +750,158 @@ namespace sc::office::excel {
         }
     }
 
+    namespace {
+        // Excel 2003's XML Spreadsheet (SpreadsheetML): one XML file, <Workbook> in the namespace
+        // urn:schemas-microsoft-com:office:spreadsheet. Whether bytes look like one: not a ZIP
+        // archive, and the namespace near the start.
+        bool spreadsheetml_bytes(const std::string_view bytes) {
+            if (bytes.starts_with("PK")) return false;
+            return bytes.substr(0, 4096).find("urn:schemas-microsoft-com:office:spreadsheet") != std::string_view::npos;
+        }
+
+        // A DateTime cell ("2023-04-27T00:00:00.000") as Excel's day number (days since 1899-12-30,
+        // the day's fraction for the time), as .xlsx keeps dates. Empty when it isn't one.
+        std::optional<double> serial_of(const std::string_view text) {
+            int y = 0, m = 0, d = 0, hh = 0, mm = 0;
+            double ss = 0;
+            const std::string copy{text};
+            const int read = std::sscanf(copy.c_str(), "%d-%d-%dT%d:%d:%lf", &y, &m, &d, &hh, &mm, &ss);
+            if (read < 3 || m < 1 || m > 12 || d < 1 || d > 31) return std::nullopt;
+            // Days from 1970-01-01 (Howard Hinnant's days_from_civil), then from 1899-12-30
+            const int yy = y - (m <= 2);
+            const int era = (yy >= 0 ? yy : yy - 399) / 400;
+            const unsigned yoe = static_cast<unsigned>(yy - era * 400);
+            const unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+            const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+            const long long days = static_cast<long long>(era) * 146097 + doe - 719468;
+            return static_cast<double>(days + 25569) + (hh * 3600 + mm * 60 + ss) / 86400.0;
+        }
+
+        // A 1-based ss:Index (or Index) attribute, as a 0-based position; fallback when there's none.
+        std::size_t index_of(const web::element &element, const std::size_t fallback) {
+            const auto text = attribute_named(element, "Index");
+            if (text.empty()) return fallback;
+            std::size_t value = 0;
+            const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+            if (error != std::errc{} || value == 0) return fallback;
+            return value - 1;
+        }
+
+        // Every <Worksheet>'s <Table>: rows and cells where ss:Index puts them (a cell after a merged
+        // one, ss:MergeAcross, moves on past it), each <Data>'s value by its ss:Type: Number as a
+        // number, DateTime as Excel's day number, Boolean as true/false, the rest as text. Formulas
+        // (R1C1, ss:Formula) aren't kept: the value is what Excel last calculated.
+        workbook from_spreadsheetml(const web::document &document) {
+            const auto root = document.root();
+            if (!root.is("Workbook")) throw std::runtime_error("excel: an XML file that isn't an XML Spreadsheet (no <Workbook>)");
+            workbook book;
+            int unnamed = 0;
+            for (const auto &worksheet: root.children("Worksheet")) {
+                auto name = attribute_named(worksheet, "Name");
+                if (name.empty()) name = "Sheet" + std::to_string(++unnamed);
+                auto &out = book.add(name);
+                const auto table = worksheet.child("Table");
+                if (!table) continue;
+                std::size_t row = 0;
+                for (const auto &each_row: table->children("Row")) {
+                    row = index_of(each_row, row);
+                    std::size_t column = 0;
+                    for (const auto &cell: each_row.children("Cell")) {
+                        column = index_of(cell, column);
+                        if (row >= max_rows || column >= max_columns) break;
+                        if (const auto data = cell.child("Data")) {
+                            const auto type = attribute_named(*data, "Type");
+                            auto text = data->text();
+                            if (type == "Number") {
+                                double number = 0;
+                                const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), number);
+                                if (error == std::errc{}) out[{row, column}] = number;
+                                else out[{row, column}] = std::move(text);
+                            } else if (type == "DateTime") {
+                                if (const auto serial = serial_of(text)) out[{row, column}] = *serial;
+                                else out[{row, column}] = std::move(text);
+                            } else if (type == "Boolean") {
+                                out[{row, column}] = text == "1" || text == "true";
+                            } else if (!text.empty()) {
+                                out[{row, column}] = std::move(text);
+                            }
+                        }
+                        std::size_t across = 0;
+                        if (const auto merged = attribute_named(cell, "MergeAcross"); !merged.empty())
+                            std::from_chars(merged.data(), merged.data() + merged.size(), across);
+                        column += 1 + across;
+                    }
+                    ++row;
+                }
+            }
+            return book;
+        }
+
+        // Report generators write XML Spreadsheets by hand and don't always escape text: a bare "&"
+        // ("Smith & Sons") or "<" ("<5000") in a cell. Those are escaped (an "&" that starts an
+        // entity, and a "<" that starts markup, stay as they are) for a second try.
+        std::string escaped_markup(const std::string_view xml) {
+            std::string out;
+            out.reserve(xml.size() + 64);
+            const auto is_name_start = [](const char c) { return std::isalpha(static_cast<unsigned char>(c)) || c == '_' || c == ':'; };
+            for (std::size_t i = 0; i < xml.size(); ++i) {
+                const char c = xml[i];
+                if (c == '&') {
+                    std::size_t j = i + 1;
+                    bool entity = false;
+                    if (j < xml.size() && xml[j] == '#') {
+                        ++j;
+                        const bool hex = j < xml.size() && (xml[j] == 'x' || xml[j] == 'X');
+                        if (hex) ++j;
+                        const auto digits = j;
+                        while (j < xml.size() && (hex ? std::isxdigit(static_cast<unsigned char>(xml[j])) : std::isdigit(static_cast<unsigned char>(xml[j])))) ++j;
+                        entity = j > digits && j < xml.size() && xml[j] == ';';
+                    } else if (j < xml.size() && is_name_start(xml[j])) {
+                        while (j < xml.size() && (std::isalnum(static_cast<unsigned char>(xml[j])) || xml[j] == '_' || xml[j] == '-' || xml[j] == '.')) ++j;
+                        entity = j < xml.size() && xml[j] == ';';
+                    }
+                    out += entity ? "&" : "&amp;";
+                } else if (c == '<') {
+                    const char next = i + 1 < xml.size() ? xml[i + 1] : ' ';
+                    out += is_name_start(next) || next == '/' || next == '!' || next == '?' ? "<" : "&lt;";
+                } else {
+                    out += c;
+                }
+            }
+            return out;
+        }
+
+        // Parsed as it is, else with its bare "&" and "<" escaped (escaped_markup()).
+        web::document parsed_spreadsheetml(const std::string &xml) {
+            try {
+                return web::document::parse(xml);
+            } catch (const web::error &) {
+                return web::document::parse(escaped_markup(xml));
+            }
+        }
+
+        std::string file_bytes(const std::filesystem::path &file) {
+            std::ifstream in{file, std::ios::binary};
+            if (!in) throw std::runtime_error("excel: can't read " + file.string());
+            return {std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}};
+        }
+    }
+
     workbook read(const std::filesystem::path &file) {
+        {
+            // An XML Spreadsheet (Excel 2003) is one XML file, not a ZIP archive
+            std::ifstream in{file, std::ios::binary};
+            char start[4096] = {};
+            in.read(start, sizeof start);
+            if (spreadsheetml_bytes({start, static_cast<std::size_t>(in.gcount())})) return from_spreadsheetml(parsed_spreadsheetml(file_bytes(file)));
+        }
         workbook book;
         book.sheets_ = sheets_of(archive::open(file));
         return book;
     }
 
     workbook read_from(std::string bytes) {
+        if (spreadsheetml_bytes(bytes)) return from_spreadsheetml(parsed_spreadsheetml(bytes));
         workbook book;
         book.sheets_ = sheets_of(archive::from_memory(std::move(bytes)));
         return book;

@@ -81,6 +81,13 @@ prices.filter("A1:B9");                  // AutoFilter buttons on row 1, for the
 sc::office::excel::write(out, "out.xlsx");
 ```
 
+`read()` also takes an Excel 2003 **XML Spreadsheet** (SpreadsheetML: one XML file with
+`<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet">`, which report generators still
+write as `.xml` or `.xls`), told apart from an `.xlsx` by its first bytes. Its sheets' values come
+in as an `.xlsx`'s would: `Number` as a number, `DateTime` as Excel's day number, `Boolean` as
+`bool`, the rest as text, where `ss:Index` and `ss:MergeAcross` put them; it has no styles, widths
+or formulas to read (a cell keeps the value Excel last calculated).
+
 Workbooks, sheets and rows work like the standard containers (and nlohmann::json):
 
 - **Cells** (`excel::cell`): `row` and `column` (from 0), `value` and `formula` (`"=C6"`, as Excel

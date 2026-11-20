@@ -40,8 +40,14 @@ namespace sc::office::excel {
     // (theme and indexed colours as sc::color) and the column widths set by hand. Throws
     // std::runtime_error for a file that isn't an .xlsx (not a ZIP archive, or no
     // xl/workbook.xml).
+    //
+    // An Excel 2003 XML Spreadsheet (SpreadsheetML: one XML file, <Workbook> in the namespace
+    // urn:schemas-microsoft-com:office:spreadsheet, as report generators still write) is read too:
+    // its sheets' values by their ss:Type (Number as a number, DateTime as Excel's day number,
+    // Boolean, the rest as text), where ss:Index and ss:MergeAcross put them; no styles, widths or
+    // formulas (a cell keeps the value Excel last calculated).
     [[nodiscard]] workbook read(const std::filesystem::path &file);
-    // The same, for an .xlsx held in memory.
+    // The same, for an .xlsx (or an XML Spreadsheet) held in memory.
     [[nodiscard]] workbook read_from(std::string bytes);
 
     // Writes the workbook as an .xlsx: each cell's value, formula and style, text inline, and the
